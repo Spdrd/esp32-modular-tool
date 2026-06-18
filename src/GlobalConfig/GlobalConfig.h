@@ -6,6 +6,8 @@
 #include "CronoManager/CronoManager.h"
 #include "DiceManager/DiceManager.h"
 #include "CanvasManager/CanvasManager.h"
+#include "TimerManager/TimerManager.h"
+#include "SimonGame/SimonGame.h"
 
 // --- SCREEN PINS ---
 #define TFT_CS    5
@@ -44,6 +46,8 @@ extern SnakeGame snake;
 extern CronoManager crono;
 extern DiceManager dice;
 extern CanvasManager canvas;
+extern TimerManager timer;
+extern SimonGame simon;
 
 // --- MENU STATE ---
 extern int currentSection;

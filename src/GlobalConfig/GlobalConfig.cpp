@@ -30,6 +30,8 @@ SnakeGame snake;
 CronoManager crono;
 DiceManager dice;
 CanvasManager canvas;
+TimerManager timer;
+SimonGame simon;
 
 // =====================================================
 // MENU DATA
@@ -51,9 +53,11 @@ static void enterClear();
 static void enterVersion();
 static void enterCredits();
 static void enterSnake();
+static void enterSimon();
 static void enterCronometro();
 static void enterDado();
 static void enterCanvas();
+static void enterTimer();
 
 static const MenuItem testItems[] = {
     {"Menu",   enterTestMenu},
@@ -81,20 +85,22 @@ static const MenuItem infoItems[] = {
 
 static const MenuItem gamesItems[] = {
     {"Snake",  enterSnake},
+    {"Simon",  enterSimon},
 };
 
 static const MenuItem toolsItems[] = {
     {"Cronometro", enterCronometro},
     {"Dado",       enterDado},
     {"Canvas",     enterCanvas},
+    {"Temporizador",enterTimer},
 };
 
 static const MenuSection menuSections[] = {
     {"Tests",   testItems,   9},
     {"Pantalla",displayItems,4},
     {"Info",    infoItems,   2},
-    {"Juegos",  gamesItems,  1},
-    {"Herramientas",toolsItems,3},
+    {"Juegos",  gamesItems,  2},
+    {"Herramientas",toolsItems,4},
 };
 
 const MenuSection* sections = menuSections;
@@ -129,6 +135,45 @@ static void enterClear()     { screen.tft.fillScreen(GC9A01A_BLACK); }
 
 static void enterVersion()   { showMessageStay("v1.0 - 2026", GC9A01A_CYAN); }
 static void enterCredits()   { showMessageStay("By J. Diego", GC9A01A_BLUE); }
+
+// =====================================================
+// SIMON
+// =====================================================
+
+static void drawSimonState() {
+    screen.drawSimon(
+        simon.getHighlight(),
+        simon.getScore(),
+        (int)simon.getState(),
+        simon.isFlashOn()
+    );
+}
+
+static void simonLoop() {
+    if (simon.update()) {
+        drawSimonState();
+    }
+}
+
+static void enterSimon() {
+    simon.reset();
+    drawSimonState();
+    itemLoopCallback = simonLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onUp    = []() { simon.pressButton(0); drawSimonState(); };
+    cbs.onDown  = []() { simon.pressButton(1); drawSimonState(); };
+    cbs.onLeft  = []() { simon.pressButton(2); drawSimonState(); };
+    cbs.onRight = []() { simon.pressButton(3); drawSimonState(); };
+    cbs.onOk    = []() {
+        if (simon.getState() == SimonGame::LOSE) {
+            simon.reset();
+            drawSimonState();
+        }
+    };
+    cbs.onMenu  = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
 
 // =====================================================
 // SNAKE
@@ -253,6 +298,45 @@ static void enterCanvas() {
 }
 
 // =====================================================
+// TEMPORIZADOR
+// =====================================================
+
+static void drawTimerState() {
+    unsigned long rem = timer.getRemainingMs();
+    int m = rem / 60000;
+    int s = (rem % 60000) / 1000;
+    screen.drawTimer(m, s, timer.getState(), timer.getField(), timer.isFlashOn());
+}
+
+static void timerLoop() {
+    if (timer.update()) {
+        drawTimerState();
+    }
+}
+
+static void enterTimer() {
+    timer.reset();
+    drawTimerState();
+    itemLoopCallback = timerLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onUp    = []() { timer.up(); drawTimerState(); };
+    cbs.onDown  = []() { timer.down(); drawTimerState(); };
+    cbs.onLeft  = []() { timer.nextField(); drawTimerState(); };
+    cbs.onRight = []() { timer.nextField(); drawTimerState(); };
+    cbs.onOk    = []() {
+        if (timer.getState() == TimerManager::DONE) {
+            timer.reset();
+        } else {
+            timer.ok();
+        }
+        drawTimerState();
+    };
+    cbs.onMenu  = []() { timer.reset(); returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
 // MENU NAVIGATION
 // =====================================================
 
@@ -300,9 +384,9 @@ static void onMenuDown()   {
 
 static void onMenuOk()     {
     itemLoopCallback = nullptr;
+    buttons.setCallbacks(getItemCallbacks());
     const MenuItem* item = &sections[currentSection].items[currentItem];
     if (item->onEnter) item->onEnter();
-    buttons.setCallbacks(getItemCallbacks());
 }
 
 static void onMenuMenu()   { renderMenu(); }

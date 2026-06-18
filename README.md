@@ -6,6 +6,7 @@ Multifunctional tool for ESP32 with GC9A01A circular display. Modular menu-drive
 
 - **Snake** — classic snake game on a 22x16 grid
 - **Cronómetro** — stopwatch with lap times (up to 10)
+- **Temporizador** — countdown timer with pause
 - **Dado** — configurable dice (d2 to d100)
 - **Canvas** — pixel paint with 9 colors
 - **Test buttons** — verify each button works
@@ -41,6 +42,7 @@ src/
 ├── GlobalConfig/             # Orchestration, menu, navigation, wiring
 ├── SnakeGame/                # Snake game logic (no rendering)
 ├── CronoManager/             # Stopwatch logic (no rendering)
+├── TimerManager/             # Countdown timer logic (no rendering)
 ├── DiceManager/              # Dice logic (no rendering)
 └── CanvasManager/            # Paint logic (no rendering)
 ```

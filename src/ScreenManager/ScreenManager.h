@@ -46,6 +46,10 @@ public:
     void drawCanvas(const uint16_t grid[], int cols, int rows,
                     int cursorX, int cursorY, uint16_t currentColor);
 
+    void drawTimer(int minutes, int seconds, int state, int field, bool flashOn);
+
+    void drawSimon(int highlight, int score, int state, bool flashOn);
+
     Adafruit_GC9A01A tft;
 
 private:

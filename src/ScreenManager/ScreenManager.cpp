@@ -382,6 +382,122 @@ void ScreenManager::drawCanvas(const uint16_t grid[], int cols, int rows,
 }
 
 // =====================================================
+// DRAW TIMER
+// =====================================================
+
+void ScreenManager::drawTimer(int minutes, int seconds, int state, int field, bool flashOn) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_WHITE);
+    int16_t x1, y1;
+    uint16_t w, h;
+    tft.getTextBounds("TEMPORIZADOR", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((tft.width() - w) / 2, 10);
+    tft.println("TEMPORIZADOR");
+
+    char buf[8];
+    sprintf(buf, "%02d:%02d", minutes, seconds);
+    tft.setTextSize(5);
+
+    if (state == 2 && flashOn) {
+        tft.setTextColor(GC9A01A_DARKGREY);
+    } else if (state == 2) {
+        tft.setTextColor(GC9A01A_RED);
+    } else if (state == 0) {
+        tft.setTextColor(GC9A01A_WHITE);
+    } else {
+        tft.setTextColor(GC9A01A_GREEN);
+    }
+
+    tft.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((tft.width() - w) / 2, 65);
+    tft.println(buf);
+
+    if (state == 0) {
+        int ux = (tft.width() - w) / 2;
+        if (field == 0) {
+            tft.drawFastHLine(ux, 95, w / 2 - 10, GC9A01A_YELLOW);
+        } else {
+            tft.drawFastHLine(ux + w / 2 + 10, 95, w / 2 - 10, GC9A01A_YELLOW);
+        }
+    }
+
+    tft.setTextSize(1);
+    if (state == 0) {
+        tft.setTextColor(GC9A01A_LIGHTGREY);
+        tft.setCursor(10, 220);
+        tft.println("[UP/DN] Ajustar  [L/R] Campo  [OK] Iniciar");
+    } else if (state == 1) {
+        tft.setTextColor(GC9A01A_GREEN);
+        tft.setCursor(10, 220);
+        tft.println("CORRIENDO  [OK] Pausa");
+    } else if (state == 2) {
+        tft.setTextColor(GC9A01A_LIGHTGREY);
+        tft.setCursor(10, 220);
+        tft.println("[OK] Reset");
+    }
+}
+
+// =====================================================
+// DRAW SIMON
+// =====================================================
+
+void ScreenManager::drawSimon(int highlight, int score, int state, bool flashOn) {
+    // Colors: 0=UP(green), 1=DOWN(red), 2=LEFT(blue), 3=RIGHT(yellow)
+    static const uint16_t LIT[4]  = { 0x07E0, 0xF800, 0x001F, 0xFFE0 };
+    static const uint16_t DIM[4]  = { 0x01E0, 0x3800, 0x0007, 0x39E0 };
+
+    tft.fillScreen(GC9A01A_BLACK);
+
+    for (int i = 0; i < 4; i++) {
+        bool lit;
+        if (state == 3) { // LOSE — blink the wrong button
+            lit = (highlight == i) && flashOn;
+        } else {
+            lit = (highlight == i);
+        }
+        uint16_t color = lit ? LIT[i] : DIM[i];
+
+        switch (i) {
+            case 0: tft.fillRoundRect(70,   5, 100, 85, 12, color); break; // UP
+            case 1: tft.fillRoundRect(70, 150, 100, 85, 12, color); break; // DOWN
+            case 2: tft.fillRoundRect(  5,  70,  85,100, 12, color); break; // LEFT
+            case 3: tft.fillRoundRect(150,  70,  85,100, 12, color); break; // RIGHT
+        }
+    }
+
+    // Center circle
+    tft.fillCircle(120, 120, 34, GC9A01A_BLACK);
+    tft.drawCircle(120, 120, 34, GC9A01A_DARKGREY);
+    tft.drawCircle(120, 120, 33, GC9A01A_DARKGREY);
+
+    char buf[8];
+    sprintf(buf, "%d", score);
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_WHITE);
+    int16_t x1, y1;
+    uint16_t w, h;
+    tft.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(120 - w / 2, 108);
+    tft.println(buf);
+
+    // State label
+    tft.setTextSize(1);
+    const char* label = "";
+    uint16_t labelColor = GC9A01A_LIGHTGREY;
+    if (state == 0) { label = "Observa...";  labelColor = GC9A01A_CYAN;   }
+    if (state == 1) { label = "Tu turno!";   labelColor = GC9A01A_GREEN;  }
+    if (state == 2) { label = "Correcto!";   labelColor = GC9A01A_YELLOW; }
+    if (state == 3) { label = "Perdiste OK"; labelColor = GC9A01A_RED;    }
+
+    tft.getTextBounds(label, 0, 0, &x1, &y1, &w, &h);
+    tft.setTextColor(labelColor);
+    tft.setCursor(120 - w / 2, 228);
+    tft.println(label);
+}
+
+// =====================================================
 // SHOW TEXT LINES
 // =====================================================
 
