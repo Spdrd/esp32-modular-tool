@@ -1,6 +1,5 @@
 #pragma once
 #include <Arduino.h>
-#include <Adafruit_GC9A01A.h>
 
 class SnakeGame {
 public:
@@ -8,10 +7,15 @@ public:
 
     void reset();
     void setDirection(int dx, int dy);
-    void update(Adafruit_GC9A01A& tft);
-    void render(Adafruit_GC9A01A& tft) const;
+    bool update();
+
     bool isGameOver() const { return gameOver; }
     int getScore() const { return score; }
+    int getLength() const { return length; }
+    int getBodyX(int i) const { return body[i].x; }
+    int getBodyY(int i) const { return body[i].y; }
+    int getFoodX() const { return foodX; }
+    int getFoodY() const { return foodY; }
 
 private:
     static const int COLS = 22;
@@ -34,5 +38,4 @@ private:
 
     void spawnFood();
     bool checkCollision(int x, int y) const;
-    void drawCell(Adafruit_GC9A01A& tft, int x, int y, uint16_t color) const;
 };

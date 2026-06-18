@@ -139,20 +139,33 @@ static void snakeDown()  { snake.setDirection(0, 1); }
 static void snakeLeft()  { snake.setDirection(-1, 0); }
 static void snakeRight() { snake.setDirection(1, 0); }
 
+static void drawSnakeState() {
+    int bodyX[100], bodyY[100];
+    int len = snake.getLength();
+    for (int i = 0; i < len; i++) {
+        bodyX[i] = snake.getBodyX(i);
+        bodyY[i] = snake.getBodyY(i);
+    }
+    screen.drawSnake(bodyX, bodyY, len, snake.getFoodX(), snake.getFoodY(),
+                     snake.getScore(), snake.isGameOver());
+}
+
 static void snakeOk() {
     if (snake.isGameOver()) {
         snake.reset();
-        snake.render(screen.tft);
+        drawSnakeState();
     }
 }
 
 static void snakeLoop() {
-    snake.update(screen.tft);
+    if (snake.update()) {
+        drawSnakeState();
+    }
 }
 
 static void enterSnake() {
     snake.reset();
-    snake.render(screen.tft);
+    drawSnakeState();
     itemLoopCallback = snakeLoop;
 
     ButtonActionCallbacks cbs;
@@ -169,17 +182,26 @@ static void enterSnake() {
 // CRONOMETRO
 // =====================================================
 
-static void cronoLoop() { crono.loop(screen.tft); }
+static void drawCronoState() {
+    unsigned long laps[10];
+    int count = crono.getLapCount();
+    for (int i = 0; i < count; i++) laps[i] = crono.getLap(i);
+    screen.drawCronometro(crono.getElapsed(), crono.isRunning(), laps, count);
+}
+
+static void cronoLoop() {
+    if (crono.shouldRender()) drawCronoState();
+}
 
 static void enterCronometro() {
     crono.reset();
-    crono.render(screen.tft);
+    drawCronoState();
     itemLoopCallback = cronoLoop;
 
     ButtonActionCallbacks cbs;
-    cbs.onOk   = []() { crono.toggle(); crono.render(screen.tft); };
-    cbs.onA    = []() { crono.markLap(); crono.render(screen.tft); };
-    cbs.onB    = []() { crono.reset(); crono.render(screen.tft); };
+    cbs.onOk   = []() { crono.toggle(); drawCronoState(); };
+    cbs.onA    = []() { crono.markLap(); drawCronoState(); };
+    cbs.onB    = []() { crono.reset(); drawCronoState(); };
     cbs.onMenu = returnToMenu;
     buttons.setCallbacks(cbs);
 }
@@ -188,14 +210,18 @@ static void enterCronometro() {
 // DADO
 // =====================================================
 
+static void drawDiceState() {
+    screen.drawDice(dice.getMax(), dice.getResult(), dice.hasRolled());
+}
+
 static void enterDado() {
-    dice.render(screen.tft);
+    drawDiceState();
     itemLoopCallback = nullptr;
 
     ButtonActionCallbacks cbs;
-    cbs.onUp    = []() { dice.increaseMax(); dice.render(screen.tft); };
-    cbs.onDown  = []() { dice.decreaseMax(); dice.render(screen.tft); };
-    cbs.onOk    = []() { dice.roll(); dice.render(screen.tft); };
+    cbs.onUp    = []() { dice.increaseMax(); drawDiceState(); };
+    cbs.onDown  = []() { dice.decreaseMax(); drawDiceState(); };
+    cbs.onOk    = []() { dice.roll(); drawDiceState(); };
     cbs.onMenu  = returnToMenu;
     buttons.setCallbacks(cbs);
 }
@@ -204,18 +230,24 @@ static void enterDado() {
 // CANVAS
 // =====================================================
 
+static void drawCanvasState() {
+    screen.drawCanvas(canvas.getGrid(), canvas.getCols(), canvas.getRows(),
+                      canvas.getCursorX(), canvas.getCursorY(),
+                      canvas.getCurrentColor());
+}
+
 static void enterCanvas() {
-    canvas.render(screen.tft);
+    drawCanvasState();
     itemLoopCallback = nullptr;
 
     ButtonActionCallbacks cbs;
-    cbs.onUp    = []() { canvas.moveCursor(0, -1); canvas.render(screen.tft); };
-    cbs.onDown  = []() { canvas.moveCursor(0, 1); canvas.render(screen.tft); };
-    cbs.onLeft  = []() { canvas.moveCursor(-1, 0); canvas.render(screen.tft); };
-    cbs.onRight = []() { canvas.moveCursor(1, 0); canvas.render(screen.tft); };
-    cbs.onOk    = []() { canvas.paint(); canvas.render(screen.tft); };
-    cbs.onA     = []() { canvas.nextColor(); canvas.render(screen.tft); };
-    cbs.onB     = []() { canvas.reset(); canvas.render(screen.tft); };
+    cbs.onUp    = []() { canvas.moveCursor(0, -1); drawCanvasState(); };
+    cbs.onDown  = []() { canvas.moveCursor(0, 1); drawCanvasState(); };
+    cbs.onLeft  = []() { canvas.moveCursor(-1, 0); drawCanvasState(); };
+    cbs.onRight = []() { canvas.moveCursor(1, 0); drawCanvasState(); };
+    cbs.onOk    = []() { canvas.paint(); drawCanvasState(); };
+    cbs.onA     = []() { canvas.nextColor(); drawCanvasState(); };
+    cbs.onB     = []() { canvas.reset(); drawCanvasState(); };
     cbs.onMenu  = returnToMenu;
     buttons.setCallbacks(cbs);
 }

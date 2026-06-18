@@ -1,6 +1,5 @@
 #pragma once
 #include <Arduino.h>
-#include <Adafruit_GC9A01A.h>
 
 class CronoManager {
 public:
@@ -9,10 +8,12 @@ public:
     void reset();
     void toggle();
     void markLap();
-    void render(Adafruit_GC9A01A& tft);
-    void loop(Adafruit_GC9A01A& tft);
+    bool shouldRender();
+
     bool isRunning() const { return running; }
     unsigned long getElapsed() const;
+    int getLapCount() const { return lapCount; }
+    unsigned long getLap(int i) const { return laps[i]; }
 
 private:
     static const int MAX_LAPS = 10;
@@ -23,6 +24,4 @@ private:
     int lapCount;
     unsigned long laps[MAX_LAPS];
     unsigned long lastRender;
-
-    void formatTime(unsigned long ms, char* buf) const;
 };

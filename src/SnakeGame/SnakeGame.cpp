@@ -60,10 +60,10 @@ bool SnakeGame::checkCollision(int x, int y) const {
     return false;
 }
 
-void SnakeGame::update(Adafruit_GC9A01A& tft) {
+bool SnakeGame::update() {
     unsigned long now = millis();
-    if (gameOver) return;
-    if (now - lastMoveMs < (unsigned long)moveDelay) return;
+    if (gameOver) return false;
+    if (now - lastMoveMs < (unsigned long)moveDelay) return false;
     lastMoveMs = now;
 
     dirX = nextDirX;
@@ -74,13 +74,13 @@ void SnakeGame::update(Adafruit_GC9A01A& tft) {
 
     if (newX < 0 || newX >= COLS || newY < 0 || newY >= ROWS) {
         gameOver = true;
-        return;
+        return true;
     }
 
     for (int i = 1; i < length; i++) {
         if (body[i].x == newX && body[i].y == newY) {
             gameOver = true;
-            return;
+            return true;
         }
     }
 
@@ -99,41 +99,5 @@ void SnakeGame::update(Adafruit_GC9A01A& tft) {
         spawnFood();
     }
 
-    render(tft);
-}
-
-void SnakeGame::drawCell(Adafruit_GC9A01A& tft, int x, int y, uint16_t color) const {
-    int px = OFSX + x * CELL;
-    int py = OFSY + y * CELL;
-    tft.fillRect(px + 1, py + 1, CELL - 2, CELL - 2, color);
-}
-
-void SnakeGame::render(Adafruit_GC9A01A& tft) const {
-    tft.fillScreen(GC9A01A_BLACK);
-
-    tft.setTextColor(GC9A01A_WHITE);
-    tft.setTextSize(1);
-    tft.setCursor(OFSX, 8);
-    tft.print("Score: ");
-    tft.println(score);
-
-    tft.drawRect(OFSX, OFSY, COLS * CELL, ROWS * CELL, GC9A01A_DARKGREY);
-
-    for (int i = 0; i < length; i++) {
-        uint16_t c = (i == 0) ? GC9A01A_GREEN : GC9A01A_GREENYELLOW;
-        drawCell(tft, body[i].x, body[i].y, c);
-    }
-
-    drawCell(tft, foodX, foodY, GC9A01A_RED);
-
-    if (gameOver) {
-        tft.setTextColor(GC9A01A_RED);
-        tft.setTextSize(2);
-        const char* msg = "GAME OVER";
-        int16_t x1, y1;
-        uint16_t w, h;
-        tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
-        tft.setCursor((tft.width() - w) / 2, tft.height() / 2 - 10);
-        tft.println(msg);
-    }
+    return true;
 }

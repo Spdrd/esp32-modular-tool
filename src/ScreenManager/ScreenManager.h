@@ -1,8 +1,5 @@
-// ScreenManager.h
-
 #pragma once
 #include <SPI.h>
-
 #include <Adafruit_GFX.h>
 #include <Adafruit_GC9A01A.h>
 #include <TJpg_Decoder.h>
@@ -24,9 +21,7 @@ public:
     ScreenManager(ScreenPinConfig config);
 
     void begin();
-
     void update(String text);
-
     void clear();
 
     void showJpeg(uint8_t* jpgBuffer, uint32_t jpgSize, int jpg_w, int jpg_h);
@@ -40,7 +35,17 @@ public:
 
     void showMenu(const char* title, const char* names[], int count, int selectedIndex);
 
-    // Necesario para callback JPEG
+    void drawSnake(const int bodyX[], const int bodyY[], int length,
+                   int foodX, int foodY, int score, bool gameOver);
+
+    void drawCronometro(unsigned long elapsed, bool running,
+                        const unsigned long laps[], int lapCount);
+
+    void drawDice(int maxValue, int result, bool rolled);
+
+    void drawCanvas(const uint16_t grid[], int cols, int rows,
+                    int cursorX, int cursorY, uint16_t currentColor);
+
     Adafruit_GC9A01A tft;
 
 private:
