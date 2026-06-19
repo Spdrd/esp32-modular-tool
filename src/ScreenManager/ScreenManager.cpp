@@ -498,6 +498,315 @@ void ScreenManager::drawSimon(int highlight, int score, int state, bool flashOn)
 }
 
 // =====================================================
+// DRAW TETRIS
+// =====================================================
+
+void ScreenManager::drawTetris(const uint8_t grid[20][10], const int8_t nextCells[4][2],
+                                int nextType, int score, int level, bool gameOver) {
+    static const uint16_t COLORS[9] = {
+        GC9A01A_BLACK,   // 0 vacío
+        GC9A01A_CYAN,    // 1 I
+        GC9A01A_YELLOW,  // 2 O
+        GC9A01A_MAGENTA, // 3 T
+        GC9A01A_GREEN,   // 4 S
+        GC9A01A_RED,     // 5 Z
+        GC9A01A_BLUE,    // 6 J
+        GC9A01A_ORANGE,  // 7 L
+        0x2965,          // 8 ghost
+    };
+
+    const int CELL = 10, SX = 70, SY = 28;
+
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // Puntaje y nivel encima del tablero
+    char buf[20];
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_WHITE);
+    sprintf(buf, "SC:%d", score);
+    tft.setCursor(SX, 14);
+    tft.print(buf);
+    sprintf(buf, "LV:%d", level);
+    tft.setCursor(SX + 55, 14);
+    tft.print(buf);
+
+    // Borde del tablero
+    tft.drawRect(SX - 1, SY - 1, 10 * CELL + 2, 20 * CELL + 2, GC9A01A_DARKGREY);
+
+    // Celdas
+    for (int r = 0; r < 20; r++) {
+        for (int c = 0; c < 10; c++) {
+            uint8_t v = grid[r][c];
+            if (v > 0 && v <= 8) {
+                tft.fillRect(SX + c * CELL + 1, SY + r * CELL + 1,
+                             CELL - 2, CELL - 2, COLORS[v]);
+            }
+        }
+    }
+
+    // Panel derecho: siguiente pieza
+    const int PX = 178, PY = 88, PREV = 7;
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_LIGHTGREY);
+    tft.setCursor(PX, PY - 13);
+    tft.print("NEXT");
+    tft.drawRect(PX - 1, PY - 1, 4 * PREV + 2, 4 * PREV + 2, GC9A01A_DARKGREY);
+    tft.fillRect(PX, PY, 4 * PREV, 4 * PREV, GC9A01A_BLACK);
+    uint16_t pc = (nextType >= 0 && nextType <= 6) ? COLORS[nextType + 1] : GC9A01A_WHITE;
+    for (int i = 0; i < 4; i++) {
+        int nr = nextCells[i][0];
+        int nc = nextCells[i][1];
+        tft.fillRect(PX + nc * PREV + 1, PY + nr * PREV + 1, PREV - 2, PREV - 2, pc);
+    }
+
+    // Game over
+    if (gameOver) {
+        int16_t x1, y1;
+        uint16_t w, h;
+        const char* msg = "GAME OVER";
+        tft.setTextSize(2);
+        tft.setTextColor(GC9A01A_RED);
+        tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+        int ox = (tft.width() - w) / 2;
+        int oy = tft.height() / 2 - 12;
+        tft.fillRect(ox - 4, oy - 2, w + 8, 28, GC9A01A_BLACK);
+        tft.setCursor(ox, oy);
+        tft.println(msg);
+        tft.setTextSize(1);
+        tft.setTextColor(GC9A01A_LIGHTGREY);
+        const char* hint = "[A] Reiniciar";
+        tft.getTextBounds(hint, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor((tft.width() - w) / 2, oy + 16);
+        tft.println(hint);
+    }
+}
+
+// =====================================================
+// DRAW 2048
+// =====================================================
+
+static uint16_t tile2048Color(int val) {
+    switch (val) {
+        case 2:    return 0xEF7B;
+        case 4:    return 0xEDB0;
+        case 8:    return 0xFD20;
+        case 16:   return 0xFC00;
+        case 32:   return 0xF940;
+        case 64:   return 0xF800;
+        case 128:  return 0xFFE0;
+        case 256:  return 0xFF40;
+        case 512:  return 0xFFA0;
+        case 1024: return 0x07E0;
+        case 2048: return 0x07FF;
+        default:   return 0x2104;
+    }
+}
+
+void ScreenManager::drawGame2048(const int grid[4][4], int score, bool won, bool gameOver) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // CELL=39, GAP=3 → total 165px. SX=SY=38 → esquinas a ~117px del centro (dentro del círculo r=120)
+    const int CELL = 39, GAP = 3, SX = 38, SY = 38;
+
+    char buf[16];
+
+    // Puntaje centrado encima del grid
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_WHITE);
+    sprintf(buf, "2048  SC:%d", score);
+    int16_t tx, ty;
+    uint16_t tw, th;
+    tft.getTextBounds(buf, 0, 0, &tx, &ty, &tw, &th);
+    tft.setCursor((tft.width() - tw) / 2, 24);
+    tft.print(buf);
+
+    // Grid
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            int val = grid[r][c];
+            int x   = SX + c * (CELL + GAP);
+            int y   = SY + r * (CELL + GAP);
+
+            tft.fillRoundRect(x, y, CELL, CELL, 4, tile2048Color(val));
+
+            if (val > 0) {
+                sprintf(buf, "%d", val);
+                // tamaño de texto según dígitos
+                uint8_t ts = (val < 100) ? 2 : 1;
+                tft.setTextSize(ts);
+                uint16_t tc = (val <= 4) ? (uint16_t)0x2104 : (uint16_t)GC9A01A_WHITE;
+                tft.setTextColor(tc);
+                int16_t x1, y1;
+                uint16_t w, h;
+                tft.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
+                tft.setCursor(x + (CELL - w) / 2, y + (CELL - h) / 2);
+                tft.print(buf);
+            }
+        }
+    }
+
+    if (won || gameOver) {
+        const char* msg = won ? "YOU WIN!" : "GAME OVER";
+        tft.setTextSize(2);
+        tft.setTextColor(won ? GC9A01A_YELLOW : GC9A01A_RED);
+        int16_t x1, y1;
+        uint16_t w, h;
+        tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+        int oy = tft.height() / 2 - 12;
+        tft.fillRect(0, oy - 4, tft.width(), 36, GC9A01A_BLACK);
+        tft.setCursor((tft.width() - w) / 2, oy);
+        tft.println(msg);
+        tft.setTextSize(1);
+        tft.setTextColor(GC9A01A_LIGHTGREY);
+        const char* hint = "[OK] Reiniciar";
+        tft.getTextBounds(hint, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor((tft.width() - w) / 2, oy + 18);
+        tft.println(hint);
+    }
+}
+
+// =====================================================
+// DRAW MORSE
+// =====================================================
+
+void ScreenManager::drawMorse(const char* pattern, const char* output, char lastDecoded) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // Título
+    int16_t x1, y1;
+    uint16_t w, h;
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_CYAN);
+    tft.getTextBounds("MORSE", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((tft.width() - w) / 2, 8);
+    tft.println("MORSE");
+    tft.drawFastHLine(10, 30, 220, GC9A01A_DARKGREY);
+
+    // Patrón actual
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_LIGHTGREY);
+    tft.setCursor(12, 40);
+    tft.print("Patron:");
+
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_WHITE);
+    tft.setCursor(12, 52);
+    tft.print(pattern[0] ? pattern : "_");
+
+    // Carácter decodificado (grande, a la derecha)
+    if (lastDecoded != ' ' && lastDecoded != '\0') {
+        char ch[2] = { lastDecoded, '\0' };
+        tft.setTextSize(4);
+        tft.setTextColor(GC9A01A_GREEN);
+        tft.getTextBounds(ch, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor(200 - w, 42);
+        tft.print(ch);
+    }
+
+    tft.drawFastHLine(10, 80, 220, GC9A01A_DARKGREY);
+
+    // Texto decodificado
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_LIGHTGREY);
+    tft.setCursor(12, 90);
+    tft.print("Texto:");
+
+    tft.setTextColor(GC9A01A_YELLOW);
+    tft.setTextSize(1);
+    // Mostrar los últimos chars del output (wrap automático)
+    int outLen = strlen(output);
+    const int maxShow = 84; // ~3 líneas × 28 chars
+    const char* showFrom = outLen > maxShow ? output + outLen - maxShow : output;
+    tft.setCursor(12, 102);
+    tft.setTextWrap(true);
+    tft.print(showFrom);
+    tft.setTextWrap(false);
+
+    // Instrucciones
+    tft.drawFastHLine(10, 188, 220, GC9A01A_DARKGREY);
+    tft.setTextSize(1);
+    tft.setTextColor(0x4208);
+    tft.setCursor(12, 196);
+    tft.print("[A]=.  [B]=-  [OK]=Enter");
+    tft.setCursor(12, 208);
+    tft.print("[DN]=Borrar  [UP]=LimpiarP");
+}
+
+// =====================================================
+// DRAW MUSIC PLAYER
+// =====================================================
+
+void ScreenManager::drawMusicPlayer(const char* name, int noteIdx, int total,
+                                    bool playing, bool paused) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // Título de la canción
+    int16_t x1, y1;
+    uint16_t w, h;
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_WHITE);
+    tft.getTextBounds(name, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((tft.width() - w) / 2, 18);
+    tft.println(name);
+
+    tft.drawFastHLine(20, 38, 200, GC9A01A_DARKGREY);
+
+    // Animación visual: círculos concéntricos que pulsan con cada nota
+    int cx = 120, cy = 118;
+    int pulse = noteIdx % 6;
+    static const uint16_t ringColors[6] = {
+        GC9A01A_CYAN, GC9A01A_BLUE, GC9A01A_MAGENTA,
+        GC9A01A_GREEN, GC9A01A_YELLOW, GC9A01A_RED
+    };
+
+    if (!paused) {
+        for (int i = 0; i < 4; i++) {
+            int r = 18 + i * 16 + pulse * 3;
+            uint16_t c = ringColors[(pulse + i) % 6];
+            tft.drawCircle(cx, cy, r, c);
+            tft.drawCircle(cx, cy, r + 1, c);
+        }
+    } else {
+        // Paused: círculos fijos grises
+        for (int i = 0; i < 4; i++) {
+            tft.drawCircle(cx, cy, 18 + i * 16, GC9A01A_DARKGREY);
+        }
+    }
+
+    // Icono estado (▶ / ▐▐)
+    tft.setTextSize(1);
+    const char* statusStr = paused ? "II PAUSADO" : (playing ? ">  TOCANDO" : "   PARADO");
+    uint16_t statusColor  = paused ? GC9A01A_YELLOW : (playing ? GC9A01A_GREEN : GC9A01A_DARKGREY);
+    tft.setTextColor(statusColor);
+    tft.getTextBounds(statusStr, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((tft.width() - w) / 2, 172);
+    tft.println(statusStr);
+
+    // Barra de progreso
+    if (total > 0) {
+        const int bx = 30, by = 186, bw = 180, bh = 6;
+        tft.drawRect(bx, by, bw, bh, GC9A01A_DARKGREY);
+        int filled = (noteIdx * bw) / total;
+        if (filled > 0)
+            tft.fillRect(bx, by, filled, bh, playing ? GC9A01A_CYAN : GC9A01A_DARKGREY);
+
+        // Porcentaje
+        char pct[8];
+        int percent = (noteIdx * 100) / total;
+        sprintf(pct, "%d%%", percent);
+        tft.setTextColor(GC9A01A_LIGHTGREY);
+        tft.getTextBounds(pct, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor((tft.width() - w) / 2, 198);
+        tft.println(pct);
+    }
+
+    // Instrucciones
+    tft.setTextColor(0x4208);
+    tft.setCursor(28, 216);
+    tft.print("[OK] Play/Pausa  [MNU] Volver");
+}
+
+// =====================================================
 // SHOW TEXT LINES
 // =====================================================
 

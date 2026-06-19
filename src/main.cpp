@@ -9,6 +9,7 @@ void setup() {
     screen.begin();
     delay(500);
 
+    speaker.begin();
     buttons.begin();
     buttons.setCallbacks(getMenuCallbacks());
 

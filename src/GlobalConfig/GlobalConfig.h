@@ -8,6 +8,14 @@
 #include "CanvasManager/CanvasManager.h"
 #include "TimerManager/TimerManager.h"
 #include "SimonGame/SimonGame.h"
+#include "TetrisGame/TetrisGame.h"
+#include "Game2048/Game2048.h"
+#include "MorseCode/MorseCode.h"
+#include "SpeakerManager/SpeakerManager.h"
+#include "audio/Aerodynamic.h"
+
+#define SPEAKER_PIN     25
+#define SPEAKER_CHANNEL  0
 
 // --- SCREEN PINS ---
 #define TFT_CS    5
@@ -26,6 +34,9 @@
 #define BTN_LEFT  14
 #define BTN_RIGHT 26
 #define BTN_OK    12
+
+// -- SPREAKER PINS ---
+#define SPK_PIN   25
 
 // --- MENU STRUCTS ---
 struct MenuItem {
@@ -48,6 +59,10 @@ extern DiceManager dice;
 extern CanvasManager canvas;
 extern TimerManager timer;
 extern SimonGame simon;
+extern TetrisGame tetris;
+extern Game2048 game2048;
+extern MorseCode morse;
+extern SpeakerManager speaker;
 
 // --- MENU STATE ---
 extern int currentSection;

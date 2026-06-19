@@ -50,6 +50,16 @@ public:
 
     void drawSimon(int highlight, int score, int state, bool flashOn);
 
+    void drawTetris(const uint8_t grid[20][10], const int8_t nextCells[4][2],
+                    int nextType, int score, int level, bool gameOver);
+
+    void drawGame2048(const int grid[4][4], int score, bool won, bool gameOver);
+
+    void drawMorse(const char* pattern, const char* output, char lastDecoded);
+
+    void drawMusicPlayer(const char* name, int noteIdx, int total,
+                         bool playing, bool paused);
+
     Adafruit_GC9A01A tft;
 
 private:

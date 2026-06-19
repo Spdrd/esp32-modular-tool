@@ -32,6 +32,10 @@ DiceManager dice;
 CanvasManager canvas;
 TimerManager timer;
 SimonGame simon;
+TetrisGame tetris;
+Game2048 game2048;
+MorseCode morse;
+SpeakerManager speaker(SPEAKER_PIN, SPEAKER_CHANNEL);
 
 // =====================================================
 // MENU DATA
@@ -54,6 +58,10 @@ static void enterVersion();
 static void enterCredits();
 static void enterSnake();
 static void enterSimon();
+static void enterTetris();
+static void enterGame2048();
+static void enterMorse();
+static void enterAerodynamic();
 static void enterCronometro();
 static void enterDado();
 static void enterCanvas();
@@ -86,21 +94,29 @@ static const MenuItem infoItems[] = {
 static const MenuItem gamesItems[] = {
     {"Snake",  enterSnake},
     {"Simon",  enterSimon},
+    {"Tetris", enterTetris},
+    {"2048",   enterGame2048},
 };
 
 static const MenuItem toolsItems[] = {
-    {"Cronometro", enterCronometro},
-    {"Dado",       enterDado},
-    {"Canvas",     enterCanvas},
+    {"Cronometro",  enterCronometro},
+    {"Dado",        enterDado},
+    {"Canvas",      enterCanvas},
     {"Temporizador",enterTimer},
+    {"Morse",       enterMorse},
+};
+
+static const MenuItem musicItems[] = {
+    {"Aerodynamic", enterAerodynamic},
 };
 
 static const MenuSection menuSections[] = {
     {"Tests",   testItems,   9},
     {"Pantalla",displayItems,4},
     {"Info",    infoItems,   2},
-    {"Juegos",  gamesItems,  2},
-    {"Herramientas",toolsItems,4},
+    {"Juegos",  gamesItems,  4},
+    {"Herramientas",toolsItems,5},
+    {"Musica",  musicItems,  1},
 };
 
 const MenuSection* sections = menuSections;
@@ -172,6 +188,167 @@ static void enterSimon() {
         }
     };
     cbs.onMenu  = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// TETRIS
+// =====================================================
+
+static void drawTetrisState() {
+    uint8_t grid[TetrisGame::ROWS][TetrisGame::COLS];
+    tetris.getDisplayGrid(grid);
+    int8_t nextCells[4][2];
+    tetris.getNextCells(nextCells);
+    screen.drawTetris(grid, nextCells, tetris.getNextPiece(),
+                      tetris.getScore(), tetris.getLevel(), tetris.isGameOver());
+}
+
+static void tetrisLoop() {
+    if (tetris.update()) drawTetrisState();
+}
+
+static void enterTetris() {
+    tetris.reset();
+    drawTetrisState();
+    itemLoopCallback = tetrisLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onUp    = []() { tetris.hardDrop();   drawTetrisState(); };
+    cbs.onDown  = []() { tetris.softDrop();   drawTetrisState(); };
+    cbs.onLeft  = []() { tetris.moveLeft();   drawTetrisState(); };
+    cbs.onRight = []() { tetris.moveRight();  drawTetrisState(); };
+    cbs.onA     = []() {
+        if (tetris.isGameOver()) { tetris.reset(); drawTetrisState(); }
+        else { tetris.rotate();    drawTetrisState(); }
+    };
+    cbs.onB     = []() {
+        if (!tetris.isGameOver()) { tetris.rotateCCW(); drawTetrisState(); }
+    };
+    cbs.onOk    = []() { tetris.hardDrop();   drawTetrisState(); };
+    cbs.onMenu  = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// 2048
+// =====================================================
+
+static void draw2048State() {
+    int grid[4][4];
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++)
+            grid[r][c] = game2048.getCell(r, c);
+    screen.drawGame2048(grid, game2048.getScore(), game2048.isWon(), game2048.isGameOver());
+}
+
+static void enterGame2048() {
+    game2048.reset();
+    draw2048State();
+    itemLoopCallback = nullptr;
+
+    ButtonActionCallbacks cbs;
+    cbs.onUp    = []() { if (game2048.slideUp())    draw2048State(); };
+    cbs.onDown  = []() { if (game2048.slideDown())  draw2048State(); };
+    cbs.onLeft  = []() { if (game2048.slideLeft())  draw2048State(); };
+    cbs.onRight = []() { if (game2048.slideRight()) draw2048State(); };
+    cbs.onOk    = []() {
+        if (game2048.isGameOver() || game2048.isWon()) {
+            game2048.reset();
+            draw2048State();
+        }
+    };
+    cbs.onMenu  = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// MORSE
+// =====================================================
+
+// Tiempos para interpretar pulsaciones de OK como morse
+static const unsigned long MORSE_DOT_MAX_MS  = 300;   // < 300ms = punto
+static const unsigned long MORSE_CHAR_GAP_MS = 1500;  // 1.5s sin pulsar = confirma letra
+static const unsigned long MORSE_WORD_GAP_MS = 3000;  // 3s sin pulsar = espacio de palabra
+
+// Estado de la pulsación OK
+static bool          s_okWasDown    = false;
+static unsigned long s_okPressStart = 0;
+static unsigned long s_lastReleaseMs = 0;
+static bool          s_hasPattern   = false; // hay símbolos sin confirmar
+
+// Buffer de notas para reproducir el beep de cada símbolo
+static MusNote s_morseNotes[MorseCode::MAX_PATTERN * 2];
+static Song    s_morseSong = { "Morse", 250, s_morseNotes, 0 };
+
+static void playMorseSymbol(bool isDot) {
+    s_morseNotes[0] = { NOTE_A4, isDot ? DUR_SIXTEENTH : DUR_DOTTED_EIGHTH };
+    s_morseSong.count = 1;
+    speaker.play(&s_morseSong, false);
+}
+
+static void drawMorseState() {
+    screen.drawMorse(morse.getPattern(), morse.getOutput(), morse.getLastDecoded());
+}
+
+static void morseLoop() {
+    speaker.update();
+
+    bool okDown = buttons.isOkDown();
+    unsigned long now = millis();
+
+    if (okDown && !s_okWasDown) {
+        // Inicio de pulsación: para reproducción anterior si hubiese
+        speaker.stop();
+        s_okPressStart = now;
+        s_okWasDown    = true;
+    } else if (!okDown && s_okWasDown) {
+        // Fin de pulsación: clasificar punto o raya
+        bool isDot = (now - s_okPressStart) < MORSE_DOT_MAX_MS;
+        if (isDot) morse.addDot(); else morse.addDash();
+        s_hasPattern   = true;
+        s_lastReleaseMs = now;
+        s_okWasDown    = false;
+        drawMorseState();
+        playMorseSymbol(isDot);
+    }
+
+    // Timers de silencio (solo cuando hay patrón pendiente y OK no está presionado)
+    if (s_hasPattern && !s_okWasDown && s_lastReleaseMs > 0) {
+        unsigned long elapsed = now - s_lastReleaseMs;
+
+        if (elapsed >= MORSE_WORD_GAP_MS) {
+            // 3s sin pulsar: confirma letra + agrega espacio
+            morse.confirmChar();
+            morse.addSpace();
+            s_hasPattern    = false;
+            s_lastReleaseMs = 0;
+            drawMorseState();
+        } else if (elapsed >= MORSE_CHAR_GAP_MS) {
+            // 1.5s sin pulsar: confirma letra
+            morse.confirmChar();
+            s_hasPattern    = false;
+            s_lastReleaseMs = 0;
+            drawMorseState();
+        }
+    }
+}
+
+static void enterMorse() {
+    morse.reset();
+    speaker.stop();
+    s_okWasDown     = false;
+    s_okPressStart  = 0;
+    s_lastReleaseMs = 0;
+    s_hasPattern    = false;
+    drawMorseState();
+    itemLoopCallback = morseLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onDown = []() { morse.deleteLast(); s_hasPattern = (morse.getPatternLen() > 0); drawMorseState(); };
+    cbs.onUp   = []() { morse.clearPattern(); s_hasPattern = false; s_lastReleaseMs = 0; drawMorseState(); };
+    cbs.onLeft = []() { morse.clearAll();    s_hasPattern = false; s_lastReleaseMs = 0; drawMorseState(); };
+    cbs.onMenu = returnToMenu;
     buttons.setCallbacks(cbs);
 }
 
@@ -337,6 +514,37 @@ static void enterTimer() {
 }
 
 // =====================================================
+// MUSICA
+// =====================================================
+
+static void drawMusicState() {
+    screen.drawMusicPlayer(
+        speaker.getSongName(),
+        speaker.getNoteIdx(),
+        speaker.getNoteCount(),
+        speaker.isPlaying(),
+        speaker.isPaused()
+    );
+}
+
+static void musicLoop() {
+    if (speaker.update()) drawMusicState();
+}
+
+static void enterSong(const Song* song) {
+    speaker.play(song);
+    drawMusicState();
+    itemLoopCallback = musicLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk   = []() { speaker.togglePause(); drawMusicState(); };
+    cbs.onMenu = []() { speaker.stop(); returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
+
+static void enterAerodynamic() { enterSong(&SONG_AERODYNAMIC); }
+
+// =====================================================
 // MENU NAVIGATION
 // =====================================================
 
@@ -413,6 +621,7 @@ static void onItemOk() {
 
 void returnToMenu() {
     itemLoopCallback = nullptr;
+    speaker.stop();
     buttons.setCallbacks(getMenuCallbacks());
     renderMenu();
 }

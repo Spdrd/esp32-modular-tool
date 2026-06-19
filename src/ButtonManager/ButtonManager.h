@@ -44,6 +44,9 @@ public:
     void onOk(void (*callback)());
 
     void setCallbacks(ButtonActionCallbacks callbacks);
+
+    bool isOkDown() const { return digitalRead(config.bOkPin) == LOW; }
+
 private:
     ButtonPinConfig config;
 
