@@ -502,7 +502,8 @@ void ScreenManager::drawSimon(int highlight, int score, int state, bool flashOn)
 // =====================================================
 
 void ScreenManager::drawTetris(const uint8_t grid[20][10], const int8_t nextCells[4][2],
-                                int nextType, int score, int level, bool gameOver) {
+                                int nextType, int score, int level, bool gameOver,
+                                int heldType, const int8_t heldCells[4][2]) {
     static const uint16_t COLORS[9] = {
         GC9A01A_BLACK,   // 0 vacío
         GC9A01A_CYAN,    // 1 I
@@ -557,6 +558,24 @@ void ScreenManager::drawTetris(const uint8_t grid[20][10], const int8_t nextCell
         int nr = nextCells[i][0];
         int nc = nextCells[i][1];
         tft.fillRect(PX + nc * PREV + 1, PY + nr * PREV + 1, PREV - 2, PREV - 2, pc);
+    }
+
+    // Panel derecho: pieza reservada (HOLD)
+    const int HY = PY + 4 * PREV + 22;
+    tft.setTextColor(GC9A01A_LIGHTGREY);
+    tft.setCursor(PX, HY - 13);
+    tft.print("HOLD");
+    tft.drawRect(PX - 1, HY - 1, 4 * PREV + 2, 4 * PREV + 2, GC9A01A_DARKGREY);
+    tft.fillRect(PX, HY, 4 * PREV, 4 * PREV, GC9A01A_BLACK);
+    if (heldType >= 0 && heldType <= 6 && heldCells != nullptr) {
+        uint16_t hc = COLORS[heldType + 1];
+        for (int i = 0; i < 4; i++) {
+            int hr = heldCells[i][0];
+            int hcc = heldCells[i][1];
+            if (hr >= 0 && hcc >= 0) {
+                tft.fillRect(PX + hcc * PREV + 1, HY + hr * PREV + 1, PREV - 2, PREV - 2, hc);
+            }
+        }
     }
 
     // Game over
@@ -804,6 +823,186 @@ void ScreenManager::drawMusicPlayer(const char* name, int noteIdx, int total,
     tft.setTextColor(0x4208);
     tft.setCursor(28, 216);
     tft.print("[OK] Play/Pausa  [MNU] Volver");
+}
+
+// =====================================================
+// DRAW SYNTH
+// =====================================================
+
+// Notas de la octava (0=C … 11=B). Las negras: índices 1,3,6,8,10
+static const bool SYNTH_IS_BLACK[12] = {
+    false,true,false,true,false,false,true,false,true,false,true,false
+};
+static const char* SYNTH_NOTE_NAMES[12] = {
+    "C","C#","D","D#","E","F","F#","G","G#","A","A#","B"
+};
+// Colores de las 12 teclas cuando están activas
+static const uint16_t SYNTH_KEY_COLORS[12] = {
+    GC9A01A_RED, 0xF800,
+    GC9A01A_YELLOW, 0xFFE0,
+    GC9A01A_GREEN,
+    GC9A01A_CYAN, 0x07FF,
+    GC9A01A_BLUE, 0x001F,
+    GC9A01A_MAGENTA, 0xF81F,
+    0xF800
+};
+
+void ScreenManager::drawSynth(int noteIdx, int octave, bool playing, bool sustain) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+
+    // --- Título ---
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_CYAN);
+    tft.getTextBounds("SYNTH", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 10);
+    tft.print("SYNTH");
+
+    // --- Anillo de color si está sonando ---
+    int cx = 120, cy = 112;
+    if (playing) {
+        uint16_t rc = SYNTH_KEY_COLORS[noteIdx % 12];
+        tft.drawCircle(cx, cy, 58, rc);
+        tft.drawCircle(cx, cy, 59, rc);
+        tft.drawCircle(cx, cy, 60, rc);
+    }
+
+    // --- Nombre de nota grande en el centro ---
+    char noteBuf[5];
+    snprintf(noteBuf, sizeof(noteBuf), "%s%d", SYNTH_NOTE_NAMES[noteIdx], octave);
+    tft.setTextSize(4);
+    uint16_t noteColor = playing ? SYNTH_KEY_COLORS[noteIdx % 12] : GC9A01A_WHITE;
+    tft.setTextColor(noteColor);
+    tft.getTextBounds(noteBuf, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, cy - h / 2);
+    tft.print(noteBuf);
+
+    // --- Indicador sustain ---
+    if (sustain) {
+        tft.setTextSize(1);
+        tft.setTextColor(GC9A01A_YELLOW);
+        tft.setCursor(10, 48);
+        tft.print("SUSTAIN");
+    }
+
+    // --- Estado ---
+    tft.setTextSize(1);
+    const char* stStr = playing ? "TOCANDO" : "LISTO";
+    uint16_t stColor  = playing ? GC9A01A_GREEN : GC9A01A_DARKGREY;
+    tft.setTextColor(stColor);
+    tft.getTextBounds(stStr, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 156);
+    tft.print(stStr);
+
+    // --- Teclado de 12 teclas (una octava) ---
+    // 12 teclas × 14px + 11 gaps × 1px = 179px → desde x=30
+    const int KX = 31, KY = 168, KW = 13, KH = 28, KGAP = 1;
+    for (int i = 0; i < 12; i++) {
+        int kx = KX + i * (KW + KGAP);
+        bool isActive = (i == noteIdx);
+        uint16_t col;
+        if (isActive) {
+            col = SYNTH_KEY_COLORS[i];
+        } else if (SYNTH_IS_BLACK[i]) {
+            col = 0x4208; // gris oscuro
+        } else {
+            col = GC9A01A_WHITE;
+        }
+        tft.fillRect(kx, KY, KW, KH, col);
+        if (!isActive) tft.drawRect(kx, KY, KW, KH, GC9A01A_DARKGREY);
+    }
+
+    // --- Instrucciones ---
+    tft.setTextSize(1);
+    tft.setTextColor(0x4208);
+    tft.setCursor(24, 202);
+    tft.print("<> Nota  ^v Oct  [A] Sus");
+    tft.setCursor(44, 213);
+    tft.print("[OK] Toca  [B] Silencio");
+}
+
+// =====================================================
+// DRAW LINTERNA
+// =====================================================
+
+// Colores TFT para cada índice (debe coincidir con LinternaManager)
+static const uint16_t LINTERNA_TFT_COLORS[8] = {
+    GC9A01A_BLUE,
+    GC9A01A_WHITE,
+    GC9A01A_RED,
+    GC9A01A_GREEN,
+    GC9A01A_CYAN,
+    GC9A01A_MAGENTA,
+    GC9A01A_YELLOW,
+    GC9A01A_ORANGE,
+};
+static const char* LINTERNA_TFT_NAMES[8] = {
+    "Azul", "Blanco", "Rojo", "Verde",
+    "Cian", "Magenta", "Amarillo", "Naranja",
+};
+
+void ScreenManager::drawLinterna(uint8_t colorIndex, uint8_t brightness, bool on) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+
+    // Título
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_WHITE);
+    tft.getTextBounds("LINTERNA", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((tft.width() - w) / 2, 10);
+    tft.print("LINTERNA");
+    tft.drawFastHLine(20, 30, 200, GC9A01A_DARKGREY);
+
+    // Círculo central con el color del LED
+    int cx = tft.width() / 2;
+    int cy = 110;
+    int cr = 52;
+    uint16_t col = on ? LINTERNA_TFT_COLORS[colorIndex] : (uint16_t)GC9A01A_DARKGREY;
+    tft.fillCircle(cx, cy, cr, col);
+    // Anillo exterior
+    tft.drawCircle(cx, cy, cr + 2, on ? col : (uint16_t)0x4208);
+    tft.drawCircle(cx, cy, cr + 3, on ? col : (uint16_t)0x4208);
+
+    // Icono ON/OFF dentro del círculo
+    tft.setTextSize(2);
+    uint16_t iconColor = on ? GC9A01A_BLACK : GC9A01A_DARKGREY;
+    const char* iconStr = on ? "ON" : "OFF";
+    tft.setTextColor(iconColor);
+    tft.getTextBounds(iconStr, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(cx - w / 2, cy - h / 2);
+    tft.print(iconStr);
+
+    // Nombre del color
+    tft.setTextSize(1);
+    tft.setTextColor(on ? LINTERNA_TFT_COLORS[colorIndex] : (uint16_t)GC9A01A_DARKGREY);
+    const char* colName = LINTERNA_TFT_NAMES[colorIndex];
+    tft.getTextBounds(colName, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(cx - w / 2, 174);
+    tft.print(colName);
+
+    // Barra de brillo
+    const int bx = 30, by = 186, bw = 180, bh = 7;
+    tft.drawRect(bx, by, bw, bh, GC9A01A_DARKGREY);
+    int filled = ((int)brightness * bw) / 255;
+    if (filled > 0 && on)
+        tft.fillRect(bx, by, filled, bh, LINTERNA_TFT_COLORS[colorIndex]);
+
+    // Porcentaje de brillo
+    char pct[8];
+    sprintf(pct, "%d%%", (brightness * 100) / 255);
+    tft.setTextColor(GC9A01A_LIGHTGREY);
+    tft.getTextBounds(pct, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(cx - w / 2, 198);
+    tft.print(pct);
+
+    // Instrucciones
+    tft.setTextColor(0x4208);
+    tft.setCursor(14, 215);
+    tft.print("<> Color  ^v Brillo  [OK] ON");
 }
 
 // =====================================================

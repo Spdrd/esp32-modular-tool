@@ -96,9 +96,8 @@ bool SimonGame::pressButton(int btn) {
         inputIdx++;
         if (inputIdx >= seqLen) {
             score++;
-            state    = WIN_STEP;
-            highlight = -1;
-            nextMs   = millis() + 800;
+            state  = WIN_STEP;
+            nextMs = millis() + 800;
         }
     } else {
         state   = LOSE;

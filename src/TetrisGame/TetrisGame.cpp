@@ -69,13 +69,15 @@ TetrisGame::TetrisGame() {
 // ---------------------------------------------------------------------------
 void TetrisGame::reset() {
     memset(board, 0, sizeof(board));
-    score      = 0;
-    level      = 0;
-    linesTotal = 0;
-    gameOver   = false;
-    dirty      = true;
-    lastDropMs = millis();
-    nextPiece  = random(7);
+    score       = 0;
+    level       = 0;
+    linesTotal  = 0;
+    gameOver    = false;
+    dirty       = true;
+    heldPiece   = -1;
+    canHoldFlag = true;
+    lastDropMs  = millis();
+    nextPiece   = random(7);
     spawnPiece();
 }
 
@@ -83,11 +85,12 @@ void TetrisGame::reset() {
 // spawnPiece
 // ---------------------------------------------------------------------------
 void TetrisGame::spawnPiece() {
-    pieceType = nextPiece;
-    nextPiece = random(7);
-    pieceRot  = 0;
-    pieceX    = 3;
-    pieceY    = 0;
+    pieceType   = nextPiece;
+    nextPiece   = random(7);
+    pieceRot    = 0;
+    pieceX      = 3;
+    pieceY      = 0;
+    canHoldFlag = true;
 
     if (!canPlace(pieceType, pieceRot, pieceX, pieceY)) {
         gameOver = true;
@@ -330,4 +333,46 @@ void TetrisGame::getNextCells(int8_t out[4][2]) const {
         out[i][0] = PIECES[nextPiece][0][i][0];
         out[i][1] = PIECES[nextPiece][0][i][1];
     }
+}
+
+// ---------------------------------------------------------------------------
+// getHeldCells
+// ---------------------------------------------------------------------------
+void TetrisGame::getHeldCells(int8_t out[4][2]) const {
+    if (heldPiece < 0) {
+        for (int i = 0; i < 4; i++) out[i][0] = out[i][1] = -1;
+        return;
+    }
+    for (int i = 0; i < 4; i++) {
+        out[i][0] = PIECES[heldPiece][0][i][0];
+        out[i][1] = PIECES[heldPiece][0][i][1];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// holdPiece
+// ---------------------------------------------------------------------------
+void TetrisGame::holdPiece() {
+    if (gameOver || !canHoldFlag) return;
+    canHoldFlag = false;
+
+    if (heldPiece < 0) {
+        // Primera vez: guardar pieza actual y hacer spawn de la siguiente
+        heldPiece = pieceType;
+        spawnPiece();
+        // spawnPiece setea canHoldFlag=true, pero acabamos de usar el hold
+        canHoldFlag = false;
+    } else {
+        // Intercambiar pieza actual con la reservada
+        int tmp   = heldPiece;
+        heldPiece = pieceType;
+        pieceType = tmp;
+        pieceRot  = 0;
+        pieceX    = 3;
+        pieceY    = 0;
+        if (!canPlace(pieceType, pieceRot, pieceX, pieceY)) {
+            gameOver = true;
+        }
+    }
+    dirty = true;
 }

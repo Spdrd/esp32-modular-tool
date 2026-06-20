@@ -1,37 +1,39 @@
 #pragma once
 #include "notes.h"
 
+// Aerodynamic — Daft Punk
+// BPM=116: eighth=258ms
+
 static const MusNote AERODYNAMIC_NOTES[] = {
     // --- Bar 1: Bm ---
-    {NOTE_D4,  DUR_EIGHTH}, {NOTE_F3,   DUR_EIGHTH},
-    {NOTE_B3,  DUR_EIGHTH}, {NOTE_F3,   DUR_EIGHTH},
+    {D4, 258, 0}, {Fb3, 258, 0},
+    {B3, 258, 0}, {Fb3, 258, 0},
     // --- Bar 2: D ---
-    {NOTE_D4,  DUR_EIGHTH}, {NOTE_GS3,  DUR_EIGHTH},
-    {NOTE_B3,  DUR_EIGHTH}, {NOTE_GS3,  DUR_EIGHTH},
+    {D4, 258, 0}, {Gb3, 258, 0},
+    {B3, 258, 0}, {Gb3, 258, 0},
     // --- Bar 3: F#m ---
-    {NOTE_G4,  DUR_EIGHTH}, {NOTE_B3,   DUR_EIGHTH},
-    {NOTE_E4,  DUR_EIGHTH}, {NOTE_B3,   DUR_EIGHTH},
+    {G4, 258, 0}, {B3,  258, 0},
+    {E4, 258, 0}, {B3,  258, 0},
     // --- Bar 4: E ---
-    {NOTE_E4,  DUR_EIGHTH}, {NOTE_A3,   DUR_EIGHTH},
-    {NOTE_CS4, DUR_EIGHTH}, {NOTE_A3,   DUR_EIGHTH},
+    {E4, 258, 0}, {A3,  258, 0},
+    {Cb4,258, 0}, {A3,  258, 0},
 
     // --- Bar 5: Bm (variación) ---
-    {NOTE_D4,  DUR_EIGHTH}, {NOTE_FS4,  DUR_EIGHTH},
-    {NOTE_B3,  DUR_EIGHTH}, {NOTE_FS4,  DUR_EIGHTH},
+    {D4, 258, 0}, {Fb4, 258, 0},
+    {B3, 258, 0}, {Fb4, 258, 0},
     // --- Bar 6: D ---
-    {NOTE_D4,  DUR_EIGHTH}, {NOTE_GS3,  DUR_EIGHTH},
-    {NOTE_B3,  DUR_EIGHTH}, {NOTE_GS3,  DUR_EIGHTH},
+    {D4, 258, 0}, {Gb3, 258, 0},
+    {B3, 258, 0}, {Gb3, 258, 0},
     // --- Bar 7: F#m ---
-    {NOTE_G4,  DUR_EIGHTH}, {NOTE_B3,   DUR_EIGHTH},
-    {NOTE_E4,  DUR_EIGHTH}, {NOTE_B3,   DUR_EIGHTH},
+    {G4, 258, 0}, {B3,  258, 0},
+    {E4, 258, 0}, {B3,  258, 0},
     // --- Bar 8: E ---
-    {NOTE_E4,  DUR_EIGHTH}, {NOTE_A3,   DUR_EIGHTH},
-    {NOTE_CS4, DUR_EIGHTH}, {NOTE_A3,   DUR_EIGHTH},
+    {E4, 258, 0}, {A3,  258, 0},
+    {Cb4,258, 0}, {A3,  258, 0},
 };
 
 static const Song SONG_AERODYNAMIC = {
     "Aerodynamic",
-    116,
     AERODYNAMIC_NOTES,
     (int)(sizeof(AERODYNAMIC_NOTES) / sizeof(AERODYNAMIC_NOTES[0]))
 };

@@ -16,22 +16,10 @@ void SpeakerManager::silence() {
     ledcWriteTone(chan, 0);
 }
 
-// -------------------------------------------------------
-// noteDurationMs
-// beats=4 → quarter note = 60000/bpm ms
-// -------------------------------------------------------
-int SpeakerManager::noteDurationMs(uint8_t beats) const {
-    if (!currentSong || currentSong->bpm <= 0) return 250;
-    return (60000 / currentSong->bpm) * beats / 4;
-}
-
 void SpeakerManager::startNote(int idx) {
     const MusNote& n = currentSong->notes[idx];
-    int dur = noteDurationMs(n.beats);
-    // Deja 15ms de silencio al final para articulación
-    int playMs = (dur > 20) ? dur - 15 : dur;
     ledcWriteTone(chan, n.freq);
-    noteEndMs = millis() + playMs;
+    noteEndMs = millis() + n.durationMs;
     inGap = false;
 }
 
@@ -47,6 +35,18 @@ void SpeakerManager::play(const Song* song, bool loopPlayback) {
     paused   = false;
     looping  = loopPlayback;
     startNote(0);
+}
+
+// -------------------------------------------------------
+// playTone / stopTone — tono continuo, sin gestión de notas
+// -------------------------------------------------------
+void SpeakerManager::playTone(uint16_t freq) {
+    stop();
+    ledcWriteTone(chan, freq);
+}
+
+void SpeakerManager::stopTone() {
+    silence();
 }
 
 // -------------------------------------------------------
@@ -87,14 +87,15 @@ bool SpeakerManager::update() {
     if (now < noteEndMs) return false;
 
     if (!inGap) {
-        // Nota terminó → silencio breve (gap de articulación)
         silence();
-        noteEndMs = now + 15;
-        inGap     = true;
-        return false;
+        uint16_t gap = currentSong->notes[noteIdx].gapMs;
+        if (gap > 0) {
+            noteEndMs = now + gap;
+            inGap     = true;
+            return false;
+        }
     }
 
-    // Gap terminó → siguiente nota
     inGap   = false;
     noteIdx++;
     if (noteIdx >= currentSong->count) {

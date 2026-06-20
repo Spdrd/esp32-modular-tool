@@ -9,6 +9,8 @@ public:
     void begin();
 
     void play(const Song* song, bool loopPlayback = true);
+    void playTone(uint16_t freq); // tono continuo hasta stopTone()
+    void stopTone();
     void pause();
     void resume();
     void stop();
@@ -38,5 +40,4 @@ private:
 
     void silence();
     void startNote(int idx);
-    int  noteDurationMs(uint8_t beats) const;
 };

@@ -51,7 +51,8 @@ public:
     void drawSimon(int highlight, int score, int state, bool flashOn);
 
     void drawTetris(const uint8_t grid[20][10], const int8_t nextCells[4][2],
-                    int nextType, int score, int level, bool gameOver);
+                    int nextType, int score, int level, bool gameOver,
+                    int heldType, const int8_t heldCells[4][2]);
 
     void drawGame2048(const int grid[4][4], int score, bool won, bool gameOver);
 
@@ -59,6 +60,10 @@ public:
 
     void drawMusicPlayer(const char* name, int noteIdx, int total,
                          bool playing, bool paused);
+
+    void drawSynth(int noteIdx, int octave, bool playing, bool sustain);
+
+    void drawLinterna(uint8_t colorIndex, uint8_t brightness, bool on);
 
     Adafruit_GC9A01A tft;
 

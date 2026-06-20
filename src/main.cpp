@@ -10,6 +10,7 @@ void setup() {
     delay(500);
 
     speaker.begin();
+    linterna.begin();
     buttons.begin();
     buttons.setCallbacks(getMenuCallbacks());
 

@@ -1,4 +1,4 @@
-#include "GlobalConfig/GlobalConfig.h"
+#include "GlobalConfig/GlobalConfig.h""
 
 // =====================================================
 // PINS
@@ -36,95 +36,7 @@ TetrisGame tetris;
 Game2048 game2048;
 MorseCode morse;
 SpeakerManager speaker(SPEAKER_PIN, SPEAKER_CHANNEL);
-
-// =====================================================
-// MENU DATA
-// =====================================================
-
-static void enterTestMenu();
-static void enterTestA();
-static void enterTestB();
-static void enterTestUp();
-static void enterTestDown();
-static void enterTestLeft();
-static void enterTestRight();
-static void enterTestOk();
-static void enterTestAll();
-static void enterFillRed();
-static void enterFillGreen();
-static void enterFillBlue();
-static void enterClear();
-static void enterVersion();
-static void enterCredits();
-static void enterSnake();
-static void enterSimon();
-static void enterTetris();
-static void enterGame2048();
-static void enterMorse();
-static void enterAerodynamic();
-static void enterCronometro();
-static void enterDado();
-static void enterCanvas();
-static void enterTimer();
-
-static const MenuItem testItems[] = {
-    {"Menu",   enterTestMenu},
-    {"A",      enterTestA},
-    {"B",      enterTestB},
-    {"UP",     enterTestUp},
-    {"DOWN",   enterTestDown},
-    {"LEFT",   enterTestLeft},
-    {"RIGHT",  enterTestRight},
-    {"OK",     enterTestOk},
-    {"All",    enterTestAll},
-};
-
-static const MenuItem displayItems[] = {
-    {"Rojo",   enterFillRed},
-    {"Verde",  enterFillGreen},
-    {"Azul",   enterFillBlue},
-    {"Limpiar",enterClear},
-};
-
-static const MenuItem infoItems[] = {
-    {"Version 1.0", enterVersion},
-    {"Creditos",    enterCredits},
-};
-
-static const MenuItem gamesItems[] = {
-    {"Snake",  enterSnake},
-    {"Simon",  enterSimon},
-    {"Tetris", enterTetris},
-    {"2048",   enterGame2048},
-};
-
-static const MenuItem toolsItems[] = {
-    {"Cronometro",  enterCronometro},
-    {"Dado",        enterDado},
-    {"Canvas",      enterCanvas},
-    {"Temporizador",enterTimer},
-    {"Morse",       enterMorse},
-};
-
-static const MenuItem musicItems[] = {
-    {"Aerodynamic", enterAerodynamic},
-};
-
-static const MenuSection menuSections[] = {
-    {"Tests",   testItems,   9},
-    {"Pantalla",displayItems,4},
-    {"Info",    infoItems,   2},
-    {"Juegos",  gamesItems,  4},
-    {"Herramientas",toolsItems,5},
-    {"Musica",  musicItems,  1},
-};
-
-const MenuSection* sections = menuSections;
-int sectionCount = sizeof(menuSections) / sizeof(menuSections[0]);
-
-int currentSection = 0;
-int currentItem = 0;
-static void (*itemLoopCallback)() = nullptr;
+LinternaManager linterna;
 
 // =====================================================
 // ON ENTER FUNCTIONS
@@ -134,27 +46,37 @@ static void showMessageStay(const char* msg, uint16_t color) {
     screen.showTextLines(msg, "", "", color);
 }
 
-static void enterTestMenu()  { showMessageStay("Menu",  GC9A01A_BLUE);    }
-static void enterTestA()     { showMessageStay("A",     GC9A01A_GREEN);   }
-static void enterTestB()     { showMessageStay("B",     GC9A01A_RED);     }
-static void enterTestUp()    { showMessageStay("UP",    GC9A01A_CYAN);    }
-static void enterTestDown()  { showMessageStay("DOWN",  GC9A01A_YELLOW);  }
-static void enterTestLeft()  { showMessageStay("LEFT",  GC9A01A_MAGENTA); }
-static void enterTestRight() { showMessageStay("RIGHT", GC9A01A_WHITE);   }
-static void enterTestOk()    { showMessageStay("OK",    GC9A01A_GREEN);   }
-static void enterTestAll()   { showMessageStay("ALL",   GC9A01A_ORANGE);  }
+void enterTestMenu()  { showMessageStay("Menu",  GC9A01A_BLUE);    }
+void enterTestA()     { showMessageStay("A",     GC9A01A_GREEN);   }
+void enterTestB()     { showMessageStay("B",     GC9A01A_RED);     }
+void enterTestUp()    { showMessageStay("UP",    GC9A01A_CYAN);    }
+void enterTestDown()  { showMessageStay("DOWN",  GC9A01A_YELLOW);  }
+void enterTestLeft()  { showMessageStay("LEFT",  GC9A01A_MAGENTA); }
+void enterTestRight() { showMessageStay("RIGHT", GC9A01A_WHITE);   }
+void enterTestOk()    { showMessageStay("OK",    GC9A01A_GREEN);   }
+void enterTestAll()   { showMessageStay("ALL",   GC9A01A_ORANGE);  }
 
-static void enterFillRed()   { screen.tft.fillScreen(GC9A01A_RED);   }
-static void enterFillGreen() { screen.tft.fillScreen(GC9A01A_GREEN); }
-static void enterFillBlue()  { screen.tft.fillScreen(GC9A01A_BLUE);  }
-static void enterClear()     { screen.tft.fillScreen(GC9A01A_BLACK); }
+void enterFillRed()   { screen.tft.fillScreen(GC9A01A_RED);   }
+void enterFillGreen() { screen.tft.fillScreen(GC9A01A_GREEN); }
+void enterFillBlue()  { screen.tft.fillScreen(GC9A01A_BLUE);  }
+void enterClear()     { screen.tft.fillScreen(GC9A01A_BLACK); }
 
-static void enterVersion()   { showMessageStay("v1.0 - 2026", GC9A01A_CYAN); }
-static void enterCredits()   { showMessageStay("By J. Diego", GC9A01A_BLUE); }
+void enterVersion()   { showMessageStay("v1.0 - 2026", GC9A01A_CYAN); }
+void enterCredits()   { showMessageStay("By J. Diego", GC9A01A_BLUE); }
 
 // =====================================================
 // SIMON
 // =====================================================
+
+static void simonPlayBtn(int btn) {
+    s_simonNote[0] = { SIMON_NOTES[btn], 200, 0 }; // 200ms = quarter @ 300 BPM
+    speaker.play(&s_simonSong, false);
+}
+
+static void simonPlayLose() {
+    s_simonNote[0] = { E3, 400, 0 }; // 400ms = half @ 300 BPM
+    speaker.play(&s_simonSong, false);
+}
 
 static void drawSimonState() {
     screen.drawSimon(
@@ -165,25 +87,48 @@ static void drawSimonState() {
     );
 }
 
+static int s_simonLastHighlight = -1;
+
 static void simonLoop() {
+    speaker.update();
     if (simon.update()) {
         drawSimonState();
+
+        int hl = simon.getHighlight();
+        SimonGame::State st = simon.getState();
+
+        // Suena cuando se ilumina un color durante SHOWING
+        if (st == SimonGame::SHOWING && hl >= 0 && hl != s_simonLastHighlight) {
+            simonPlayBtn(hl);
+        }
+        // Suena la nota grave al perder
+        if (st == SimonGame::LOSE && s_simonLastHighlight != -2) {
+            simonPlayLose();
+            s_simonLastHighlight = -2; // marca para no repetir
+            return;
+        }
+
+        s_simonLastHighlight = hl;
     }
 }
 
-static void enterSimon() {
+void enterSimon() {
     simon.reset();
+    speaker.stop();
+    s_simonLastHighlight = -1;
     drawSimonState();
     itemLoopCallback = simonLoop;
 
     ButtonActionCallbacks cbs;
-    cbs.onUp    = []() { simon.pressButton(0); drawSimonState(); };
-    cbs.onDown  = []() { simon.pressButton(1); drawSimonState(); };
-    cbs.onLeft  = []() { simon.pressButton(2); drawSimonState(); };
-    cbs.onRight = []() { simon.pressButton(3); drawSimonState(); };
+    cbs.onUp    = []() { if (simon.pressButton(0)) { simonPlayBtn(0); drawSimonState(); } };
+    cbs.onDown  = []() { if (simon.pressButton(1)) { simonPlayBtn(1); drawSimonState(); } };
+    cbs.onLeft  = []() { if (simon.pressButton(2)) { simonPlayBtn(2); drawSimonState(); } };
+    cbs.onRight = []() { if (simon.pressButton(3)) { simonPlayBtn(3); drawSimonState(); } };
     cbs.onOk    = []() {
         if (simon.getState() == SimonGame::LOSE) {
             simon.reset();
+            speaker.stop();
+            s_simonLastHighlight = -1;
             drawSimonState();
         }
     };
@@ -200,15 +145,18 @@ static void drawTetrisState() {
     tetris.getDisplayGrid(grid);
     int8_t nextCells[4][2];
     tetris.getNextCells(nextCells);
+    int8_t heldCells[4][2];
+    tetris.getHeldCells(heldCells);
     screen.drawTetris(grid, nextCells, tetris.getNextPiece(),
-                      tetris.getScore(), tetris.getLevel(), tetris.isGameOver());
+                      tetris.getScore(), tetris.getLevel(), tetris.isGameOver(),
+                      tetris.getHeldPiece(), heldCells);
 }
 
 static void tetrisLoop() {
     if (tetris.update()) drawTetrisState();
 }
 
-static void enterTetris() {
+void enterTetris() {
     tetris.reset();
     drawTetrisState();
     itemLoopCallback = tetrisLoop;
@@ -225,7 +173,7 @@ static void enterTetris() {
     cbs.onB     = []() {
         if (!tetris.isGameOver()) { tetris.rotateCCW(); drawTetrisState(); }
     };
-    cbs.onOk    = []() { tetris.hardDrop();   drawTetrisState(); };
+    cbs.onOk    = []() { tetris.holdPiece();  drawTetrisState(); };
     cbs.onMenu  = returnToMenu;
     buttons.setCallbacks(cbs);
 }
@@ -242,7 +190,7 @@ static void draw2048State() {
     screen.drawGame2048(grid, game2048.getScore(), game2048.isWon(), game2048.isGameOver());
 }
 
-static void enterGame2048() {
+void enterGame2048() {
     game2048.reset();
     draw2048State();
     itemLoopCallback = nullptr;
@@ -279,10 +227,10 @@ static bool          s_hasPattern   = false; // hay símbolos sin confirmar
 
 // Buffer de notas para reproducir el beep de cada símbolo
 static MusNote s_morseNotes[MorseCode::MAX_PATTERN * 2];
-static Song    s_morseSong = { "Morse", 250, s_morseNotes, 0 };
+static Song    s_morseSong = { "Morse", s_morseNotes, 0 };
 
 static void playMorseSymbol(bool isDot) {
-    s_morseNotes[0] = { NOTE_A4, isDot ? DUR_SIXTEENTH : DUR_DOTTED_EIGHTH };
+    s_morseNotes[0] = { A4, (uint16_t)(isDot ? 60 : 90), 0 }; // 60ms=dot, 90ms=dash @ 250 BPM
     s_morseSong.count = 1;
     speaker.play(&s_morseSong, false);
 }
@@ -334,7 +282,7 @@ static void morseLoop() {
     }
 }
 
-static void enterMorse() {
+void enterMorse() {
     morse.reset();
     speaker.stop();
     s_okWasDown     = false;
@@ -349,6 +297,76 @@ static void enterMorse() {
     cbs.onUp   = []() { morse.clearPattern(); s_hasPattern = false; s_lastReleaseMs = 0; drawMorseState(); };
     cbs.onLeft = []() { morse.clearAll();    s_hasPattern = false; s_lastReleaseMs = 0; drawMorseState(); };
     cbs.onMenu = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// SYNTH
+// =====================================================
+
+static void drawSynthState() {
+    screen.drawSynth(s_synthNote, s_synthOct + 3, s_synthPlaying, s_synthSustain);
+}
+
+static void synthStartNote() {
+    s_synthPlaying = true;
+    speaker.playTone(SYNTH_FREQS[s_synthOct][s_synthNote]);
+}
+
+static void synthStopNote() {
+    s_synthPlaying = false;
+    speaker.stopTone();
+}
+
+static void synthLoop() {
+    bool okDown = buttons.isOkDown();
+    if (okDown && !s_synthOkWas) {
+        synthStartNote();
+        drawSynthState();
+    } else if (!okDown && s_synthOkWas && !s_synthSustain) {
+        synthStopNote();
+        drawSynthState();
+    }
+    s_synthOkWas = okDown;
+}
+
+void enterSynth() {
+    s_synthNote    = 0;
+    s_synthOct     = 1;
+    s_synthPlaying = false;
+    s_synthSustain = false;
+    s_synthOkWas   = false;
+    speaker.stop();
+    drawSynthState();
+    itemLoopCallback = synthLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onRight = []() {
+        s_synthNote = (s_synthNote + 1) % 12;
+        if (s_synthPlaying) synthStartNote();
+        drawSynthState();
+    };
+    cbs.onLeft = []() {
+        s_synthNote = (s_synthNote + 11) % 12;
+        if (s_synthPlaying) synthStartNote();
+        drawSynthState();
+    };
+    cbs.onUp = []() {
+        if (s_synthOct < 3) { s_synthOct++; if (s_synthPlaying) synthStartNote(); drawSynthState(); }
+    };
+    cbs.onDown = []() {
+        if (s_synthOct > 0) { s_synthOct--; if (s_synthPlaying) synthStartNote(); drawSynthState(); }
+    };
+    cbs.onA = []() {
+        s_synthSustain = !s_synthSustain;
+        if (!s_synthSustain && !buttons.isOkDown()) { synthStopNote(); }
+        drawSynthState();
+    };
+    cbs.onB = []() {
+        synthStopNote();
+        drawSynthState();
+    };
+    cbs.onMenu = []() { synthStopNote(); returnToMenu(); };
     buttons.setCallbacks(cbs);
 }
 
@@ -385,7 +403,7 @@ static void snakeLoop() {
     }
 }
 
-static void enterSnake() {
+void enterSnake() {
     snake.reset();
     drawSnakeState();
     itemLoopCallback = snakeLoop;
@@ -415,7 +433,7 @@ static void cronoLoop() {
     if (crono.shouldRender()) drawCronoState();
 }
 
-static void enterCronometro() {
+void enterCronometro() {
     crono.reset();
     drawCronoState();
     itemLoopCallback = cronoLoop;
@@ -436,7 +454,7 @@ static void drawDiceState() {
     screen.drawDice(dice.getMax(), dice.getResult(), dice.hasRolled());
 }
 
-static void enterDado() {
+void enterDado() {
     drawDiceState();
     itemLoopCallback = nullptr;
 
@@ -458,7 +476,7 @@ static void drawCanvasState() {
                       canvas.getCurrentColor());
 }
 
-static void enterCanvas() {
+void enterCanvas() {
     drawCanvasState();
     itemLoopCallback = nullptr;
 
@@ -491,7 +509,7 @@ static void timerLoop() {
     }
 }
 
-static void enterTimer() {
+void enterTimer() {
     timer.reset();
     drawTimerState();
     itemLoopCallback = timerLoop;
@@ -531,8 +549,8 @@ static void musicLoop() {
     if (speaker.update()) drawMusicState();
 }
 
-static void enterSong(const Song* song) {
-    speaker.play(song);
+void enterSong(const Song& song) {
+    speaker.play(&song);
     drawMusicState();
     itemLoopCallback = musicLoop;
 
@@ -542,7 +560,33 @@ static void enterSong(const Song* song) {
     buttons.setCallbacks(cbs);
 }
 
-static void enterAerodynamic() { enterSong(&SONG_AERODYNAMIC); }
+
+// =====================================================
+// LINTERNA
+// =====================================================
+
+static void drawLinternaState() {
+    screen.drawLinterna(
+        linterna.getColorIndex(),
+        linterna.getBrightness(),
+        linterna.isOn()
+    );
+}
+
+void enterLinterna() {
+    linterna.turnOff();
+    drawLinternaState();
+    itemLoopCallback = nullptr;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk    = []() { linterna.toggle();       drawLinternaState(); };
+    cbs.onRight = []() { linterna.nextColor();    drawLinternaState(); };
+    cbs.onLeft  = []() { linterna.prevColor();    drawLinternaState(); };
+    cbs.onUp    = []() { linterna.brightnessUp(); drawLinternaState(); };
+    cbs.onDown  = []() { linterna.brightnessDown(); drawLinternaState(); };
+    cbs.onMenu  = []() { linterna.turnOff(); returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
 
 // =====================================================
 // MENU NAVIGATION
