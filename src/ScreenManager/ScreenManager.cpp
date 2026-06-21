@@ -1103,3 +1103,64 @@ void ScreenManager::showTextLines(
 
     tft.println(line3);
 }
+// ---------------------------------------------------------------------------
+// drawBluetooth
+// ---------------------------------------------------------------------------
+void ScreenManager::drawBluetooth(bool connected, const char* device) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    const int CX = 120;
+    int16_t x1; int16_t y1; uint16_t w; uint16_t h;
+
+    // Titulo
+    tft.setTextSize(1);
+    tft.setTextColor(0x039F);  // azul BT
+    const char* hdr = "BLUETOOTH REMOTE";
+    tft.getTextBounds(hdr, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(CX - w / 2, 22);
+    tft.print(hdr);
+
+    // Icono / estado
+    tft.setTextSize(3);
+    tft.setTextColor(connected ? GC9A01A_CYAN : GC9A01A_DARKGREY);
+    const char* icon = "BT";
+    tft.getTextBounds(icon, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(CX - w / 2, 50);
+    tft.print(icon);
+
+    // Nombre del dispositivo
+    tft.setTextSize(1);
+    tft.setTextColor(connected ? GC9A01A_GREEN : GC9A01A_DARKGREY);
+    tft.getTextBounds(device, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(CX - w / 2, 90);
+    tft.print(device);
+
+    tft.drawFastHLine(30, 105, 180, GC9A01A_DARKGREY);
+
+    if (connected) {
+        // Instrucciones controles
+        tft.setTextColor(GC9A01A_LIGHTGREY);
+        struct { const char* label; int y; } rows[] = {
+            {"[OK]  Play / Pause",  118},
+            {"[<]   Anterior",      132},
+            {"[>]   Siguiente",     146},
+            {"[^]   Volumen +",     160},
+            {"[v]   Volumen -",     174},
+        };
+        for (auto& r : rows) {
+            tft.getTextBounds(r.label, 0, 0, &x1, &y1, &w, &h);
+            tft.setCursor(CX - w / 2, r.y);
+            tft.print(r.label);
+        }
+    } else {
+        tft.setTextColor(GC9A01A_DARKGREY);
+        const char* hint = "Conecta 'ESP32-Remote'";
+        tft.getTextBounds(hint, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor(CX - w / 2, 120);
+        tft.print(hint);
+        const char* hint2 = "en Bluetooth de tu cel";
+        tft.getTextBounds(hint2, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor(CX - w / 2, 134);
+        tft.print(hint2);
+    }
+}

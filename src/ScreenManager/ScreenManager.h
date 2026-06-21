@@ -65,6 +65,8 @@ public:
 
     void drawLinterna(uint8_t colorIndex, uint8_t brightness, bool on);
 
+    void drawBluetooth(bool connected, const char* device);
+
     Adafruit_GC9A01A tft;
 
 private:

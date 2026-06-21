@@ -1,4 +1,4 @@
-#include "GlobalConfig/GlobalConfig.h""
+#include "GlobalConfig/GlobalConfig.h"
 
 // =====================================================
 // PINS
@@ -37,6 +37,108 @@ Game2048 game2048;
 MorseCode morse;
 SpeakerManager speaker(SPEAKER_PIN, SPEAKER_CHANNEL);
 LinternaManager linterna;
+BluetoothManager bt;
+
+// =====================================================
+// MENU DATA
+// =====================================================
+
+static const MenuItem testItems[] = {
+    {"Menu",   enterTestMenu},
+    {"A",      enterTestA},
+    {"B",      enterTestB},
+    {"UP",     enterTestUp},
+    {"DOWN",   enterTestDown},
+    {"LEFT",   enterTestLeft},
+    {"RIGHT",  enterTestRight},
+    {"OK",     enterTestOk},
+    {"All",    enterTestAll},
+};
+
+static const MenuItem displayItems[] = {
+    {"Rojo",   enterFillRed},
+    {"Verde",  enterFillGreen},
+    {"Azul",   enterFillBlue},
+    {"Limpiar",enterClear},
+};
+
+static const MenuItem infoItems[] = {
+    {"Version 1.0", enterVersion},
+    {"Creditos",    enterCredits},
+};
+
+static const MenuItem gamesItems[] = {
+    {"Snake",  enterSnake},
+    {"Simon",  enterSimon},
+    {"Tetris", enterTetris},
+    {"2048",   enterGame2048},
+};
+
+static const MenuItem toolsItems[] = {
+    {"Cronometro",  enterCronometro},
+    {"Dado",        enterDado},
+    {"Canvas",      enterCanvas},
+    {"Temporizador",enterTimer},
+    {"Morse",       enterMorse},
+    {"Synth",       enterSynth},
+    {"Linterna",    enterLinterna},
+};
+
+static const MenuItem musicItems[] = {
+    {"Aerodynamic",       []() { enterSong(SONG_AERODYNAMIC); }},
+    {"Get Lucky",         []() { enterSong(SONG_GETLUCKY); }},
+    {"H-B-F-S",           []() { enterSong(SONG_HBF); }},
+    {"Never Gonna",       []() { enterSong(SONG_NGGYU); }},
+    {"Kids",              []() { enterSong(SONG_KIDS); }},
+    {"Adults Are Talking",[]() { enterSong(SONG_ADULTS_ARE_TALKING); }},
+    {"Outer Wilds",       []() { enterSong(SONG_OUTER_WILDS); }},
+    {"Riptide",           []() { enterSong(SONG_RIPTIDE); }},
+};
+
+static const MenuItem bluetoothItems[] = {
+    {"Control Musica", enterBluetooth},
+};
+
+static const MenuSection menuSections[] = {
+    {"Tests",      testItems,      9},
+    {"Pantalla",   displayItems,   4},
+    {"Info",       infoItems,      2},
+    {"Juegos",     gamesItems,     4},
+    {"Herramientas",toolsItems,    7},
+    {"Musica",     musicItems,     8},
+    {"Bluetooth",  bluetoothItems, 1},
+};
+
+const MenuSection* sections = menuSections;
+int sectionCount = sizeof(menuSections) / sizeof(menuSections[0]);
+
+int currentSection = 0;
+int currentItem    = 0;
+static void (*itemLoopCallback)() = nullptr;
+
+// =====================================================
+// SIMON STATE
+// =====================================================
+
+static const uint16_t SIMON_NOTES[4] = { E5, C5, G4, A4 };
+static MusNote s_simonNote[1];
+static Song    s_simonSong = { "Simon", s_simonNote, 1 };
+
+// =====================================================
+// SYNTH STATE
+// =====================================================
+
+static const uint16_t SYNTH_FREQS[4][12] = {
+    {131,139,147,156,165,175,185,196,208,220,233,247},
+    {262,277,294,311,330,349,370,392,415,440,466,494},
+    {523,554,587,622,659,698,740,784,831,880,932,988},
+    {1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976},
+};
+static int  s_synthNote    = 0;
+static int  s_synthOct     = 1;
+static bool s_synthPlaying = false;
+static bool s_synthSustain = false;
+static bool s_synthOkWas   = false;
 
 // =====================================================
 // ON ENTER FUNCTIONS
@@ -585,6 +687,42 @@ void enterLinterna() {
     cbs.onUp    = []() { linterna.brightnessUp(); drawLinternaState(); };
     cbs.onDown  = []() { linterna.brightnessDown(); drawLinternaState(); };
     cbs.onMenu  = []() { linterna.turnOff(); returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// BLUETOOTH
+// =====================================================
+
+static void drawBluetoothState() {
+    screen.drawBluetooth(bt.isConnected(), bt.getDevice());
+}
+
+static void bluetoothLoop() {
+    bt.update();
+    // Redibuja solo cuando cambia estado (simplificado: cada 500ms)
+    static unsigned long lastDraw = 0;
+    unsigned long now = millis();
+    if (now - lastDraw >= 500) {
+        lastDraw = now;
+        drawBluetoothState();
+    }
+}
+
+void enterBluetooth() {
+    speaker.stop();  // liberar LEDC antes de iniciar BT
+    // Dibujar ANTES de iniciar BT — start() bloquea ~1-2s
+    drawBluetoothState();
+    bt.begin();
+    itemLoopCallback = bluetoothLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk    = []() { bt.togglePlay();   drawBluetoothState(); };
+    cbs.onRight = []() { bt.next();         drawBluetoothState(); };
+    cbs.onLeft  = []() { bt.previous();     drawBluetoothState(); };
+    cbs.onUp    = []() { bt.volumeUp();     drawBluetoothState(); };
+    cbs.onDown  = []() { bt.volumeDown();   drawBluetoothState(); };
+    cbs.onMenu  = []() { bt.stop(); returnToMenu(); };
     buttons.setCallbacks(cbs);
 }
 
