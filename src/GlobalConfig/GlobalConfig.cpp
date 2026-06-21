@@ -37,7 +37,6 @@ Game2048 game2048;
 MorseCode morse;
 SpeakerManager speaker(SPEAKER_PIN, SPEAKER_CHANNEL);
 LinternaManager linterna;
-BluetoothManager bt;
 
 // =====================================================
 // MENU DATA
@@ -95,10 +94,6 @@ static const MenuItem musicItems[] = {
     {"Riptide",           []() { enterSong(SONG_RIPTIDE); }},
 };
 
-static const MenuItem bluetoothItems[] = {
-    {"Control Musica", enterBluetooth},
-};
-
 static const MenuSection menuSections[] = {
     {"Tests",      testItems,      9},
     {"Pantalla",   displayItems,   4},
@@ -106,7 +101,6 @@ static const MenuSection menuSections[] = {
     {"Juegos",     gamesItems,     4},
     {"Herramientas",toolsItems,    7},
     {"Musica",     musicItems,     8},
-    {"Bluetooth",  bluetoothItems, 1},
 };
 
 const MenuSection* sections = menuSections;
@@ -687,42 +681,6 @@ void enterLinterna() {
     cbs.onUp    = []() { linterna.brightnessUp(); drawLinternaState(); };
     cbs.onDown  = []() { linterna.brightnessDown(); drawLinternaState(); };
     cbs.onMenu  = []() { linterna.turnOff(); returnToMenu(); };
-    buttons.setCallbacks(cbs);
-}
-
-// =====================================================
-// BLUETOOTH
-// =====================================================
-
-static void drawBluetoothState() {
-    screen.drawBluetooth(bt.isConnected(), bt.getDevice());
-}
-
-static void bluetoothLoop() {
-    bt.update();
-    // Redibuja solo cuando cambia estado (simplificado: cada 500ms)
-    static unsigned long lastDraw = 0;
-    unsigned long now = millis();
-    if (now - lastDraw >= 500) {
-        lastDraw = now;
-        drawBluetoothState();
-    }
-}
-
-void enterBluetooth() {
-    speaker.stop();  // liberar LEDC antes de iniciar BT
-    // Dibujar ANTES de iniciar BT — start() bloquea ~1-2s
-    drawBluetoothState();
-    bt.begin();
-    itemLoopCallback = bluetoothLoop;
-
-    ButtonActionCallbacks cbs;
-    cbs.onOk    = []() { bt.togglePlay();   drawBluetoothState(); };
-    cbs.onRight = []() { bt.next();         drawBluetoothState(); };
-    cbs.onLeft  = []() { bt.previous();     drawBluetoothState(); };
-    cbs.onUp    = []() { bt.volumeUp();     drawBluetoothState(); };
-    cbs.onDown  = []() { bt.volumeDown();   drawBluetoothState(); };
-    cbs.onMenu  = []() { bt.stop(); returnToMenu(); };
     buttons.setCallbacks(cbs);
 }
 

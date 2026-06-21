@@ -13,7 +13,6 @@
 #include "MorseCode/MorseCode.h"
 #include "SpeakerManager/SpeakerManager.h"
 #include "LinternaManager/LinternaManager.h"
-#include "BluetoothManager/BluetoothManager.h"
 #include "audio/Aerodynamic.h"
 #include "audio/GetLucky.h"
 #include "audio/NeverGonnaGiveYouUp.h"
@@ -76,7 +75,6 @@ extern Game2048           game2048;
 extern MorseCode          morse;
 extern SpeakerManager     speaker;
 extern LinternaManager    linterna;
-extern BluetoothManager   bt;
 
 // --- MENU STATE ---
 extern int currentSection;
@@ -118,5 +116,4 @@ void enterCanvas();
 void enterTimer();
 void enterSynth();
 void enterLinterna();
-void enterBluetooth();
 void enterSong(const Song& song);
