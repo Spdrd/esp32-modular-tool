@@ -129,10 +129,24 @@ static const uint16_t SYNTH_FREQS[4][12] = {
     {1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976},
 };
 static int  s_synthNote    = 0;
-static int  s_synthOct     = 1;
+static int  s_synthOct     = 1;     // indice 0..3 en SYNTH_FREQS
 static bool s_synthPlaying = false;
-static bool s_synthSustain = false;
 static bool s_synthOkWas   = false;
+static int  s_synthMode    = 0;     // 0 = TOCAR, 1 = SECUENCIA
+
+// --- Secuenciador ---
+static const int SYNTH_MAX_STEPS = 8;
+static const int SYNTH_MAX_DUR   = 8;   // tiempos maximos por nota
+static int  s_seqNote[SYNTH_MAX_STEPS];
+static int  s_seqOct[SYNTH_MAX_STEPS];
+static int  s_seqDur[SYNTH_MAX_STEPS];  // duracion en tiempos de cada paso
+static int  s_seqLen        = 0;
+static int  s_seqCursor     = 0;
+static bool s_seqPlaying    = false;
+static int  s_seqPlayStep   = -1;
+static int  s_seqBpm        = 120;
+static unsigned long s_seqStepEndMs = 0;
+static unsigned long s_seqNoteOffMs = 0;
 
 // =====================================================
 // ON ENTER FUNCTIONS
@@ -401,7 +415,20 @@ void enterMorse() {
 // =====================================================
 
 static void drawSynthState() {
-    screen.drawSynth(s_synthNote, s_synthOct + 3, s_synthPlaying, s_synthSustain);
+    SynthView v;
+    v.noteIdx    = s_synthNote;
+    v.octave     = s_synthOct + 3;
+    v.playing    = s_synthPlaying;
+    v.mode       = s_synthMode;
+    v.seqNotes   = s_seqNote;
+    v.seqOcts    = s_seqOct;
+    v.seqDurs    = s_seqDur;
+    v.seqLen     = s_seqLen;
+    v.seqCursor  = s_seqCursor;
+    v.seqPlaying = s_seqPlaying;
+    v.playStep   = s_seqPlayStep;
+    v.tempoBpm   = s_seqBpm;
+    screen.drawSynth(v);
 }
 
 static void synthStartNote() {
@@ -414,55 +441,158 @@ static void synthStopNote() {
     speaker.stopTone();
 }
 
+// Reproduce la nota de un paso de la secuencia
+static void seqPlayStepTone(int i) {
+    speaker.playTone(SYNTH_FREQS[s_seqOct[i]][s_seqNote[i]]);
+}
+
 static void synthLoop() {
-    bool okDown = buttons.isOkDown();
-    if (okDown && !s_synthOkWas) {
-        synthStartNote();
-        drawSynthState();
-    } else if (!okDown && s_synthOkWas && !s_synthSustain) {
-        synthStopNote();
-        drawSynthState();
+    // --- Modo TOCAR: mantener OK para sonar (solo si el bucle no manda) ---
+    if (s_synthMode == 0 && !s_seqPlaying) {
+        bool okDown = buttons.isOkDown();
+        if (okDown && !s_synthOkWas) {
+            synthStartNote();
+            drawSynthState();
+        } else if (!okDown && s_synthOkWas) {
+            synthStopNote();
+            drawSynthState();
+        }
+        s_synthOkWas = okDown;
     }
-    s_synthOkWas = okDown;
+
+    // --- Bucle del secuenciador (corre en cualquier modo) ---
+    if (s_seqPlaying && s_seqLen > 0) {
+        unsigned long now = millis();
+        unsigned long beatMs = 60000UL / (unsigned long)s_seqBpm;
+        if (s_seqPlayStep < 0 || now >= s_seqStepEndMs) {
+            s_seqPlayStep = (s_seqPlayStep + 1) % s_seqLen;
+            unsigned long stepMs = beatMs * (unsigned long)s_seqDur[s_seqPlayStep];
+            seqPlayStepTone(s_seqPlayStep);
+            s_seqStepEndMs = now + stepMs;
+            s_seqNoteOffMs = now + (stepMs * 5) / 6;  // pequeño silencio al final
+            drawSynthState();
+        } else if (s_seqNoteOffMs != 0 && now >= s_seqNoteOffMs) {
+            speaker.stopTone();
+            s_seqNoteOffMs = 0;
+        }
+    }
+}
+
+static void synthAddStep() {
+    if (s_seqLen >= SYNTH_MAX_STEPS) return;
+    s_seqNote[s_seqLen] = s_synthNote;
+    s_seqOct[s_seqLen]  = s_synthOct;
+    s_seqDur[s_seqLen]  = 1;            // por defecto 1 tiempo
+    s_seqLen++;
+    s_seqCursor = s_seqLen - 1;
+}
+
+static void synthDeleteStep() {
+    if (s_seqLen == 0) return;
+    for (int k = s_seqCursor; k < s_seqLen - 1; k++) {
+        s_seqNote[k] = s_seqNote[k + 1];
+        s_seqOct[k]  = s_seqOct[k + 1];
+        s_seqDur[k]  = s_seqDur[k + 1];
+    }
+    s_seqLen--;
+    if (s_seqLen == 0) {
+        s_seqPlaying  = false;
+        s_seqPlayStep = -1;
+        s_seqCursor   = 0;
+        speaker.stopTone();
+    } else if (s_seqCursor >= s_seqLen) {
+        s_seqCursor = s_seqLen - 1;
+    }
+}
+
+static void synthToggleLoop() {
+    if (s_seqLen == 0) return;
+    s_seqPlaying = !s_seqPlaying;
+    if (s_seqPlaying) {
+        synthStopNote();           // corta preview
+        s_synthOkWas    = false;
+        s_seqPlayStep   = -1;
+        s_seqStepEndMs  = 0;
+        s_seqNoteOffMs  = 0;
+    } else {
+        speaker.stopTone();
+        s_seqPlayStep = -1;
+    }
 }
 
 void enterSynth() {
     s_synthNote    = 0;
     s_synthOct     = 1;
     s_synthPlaying = false;
-    s_synthSustain = false;
     s_synthOkWas   = false;
+    s_synthMode    = 0;
+    s_seqLen       = 0;
+    s_seqCursor    = 0;
+    s_seqPlaying   = false;
+    s_seqPlayStep  = -1;
+    s_seqBpm       = 120;
     speaker.stop();
     drawSynthState();
     itemLoopCallback = synthLoop;
 
     ButtonActionCallbacks cbs;
+
+    // Modos: 0 = TOCAR, 1 = TEMPO, 2 = SECUENCIA
     cbs.onRight = []() {
-        s_synthNote = (s_synthNote + 1) % 12;
-        if (s_synthPlaying) synthStartNote();
+        if (s_synthMode == 0) {
+            s_synthNote = (s_synthNote + 1) % 12;
+            if (s_synthPlaying) synthStartNote();
+        } else if (s_synthMode == 2 && s_seqLen > 0) {
+            s_seqCursor = (s_seqCursor + 1) % s_seqLen;
+        }
         drawSynthState();
     };
     cbs.onLeft = []() {
-        s_synthNote = (s_synthNote + 11) % 12;
-        if (s_synthPlaying) synthStartNote();
+        if (s_synthMode == 0) {
+            s_synthNote = (s_synthNote + 11) % 12;
+            if (s_synthPlaying) synthStartNote();
+        } else if (s_synthMode == 2 && s_seqLen > 0) {
+            s_seqCursor = (s_seqCursor + s_seqLen - 1) % s_seqLen;
+        }
         drawSynthState();
     };
     cbs.onUp = []() {
-        if (s_synthOct < 3) { s_synthOct++; if (s_synthPlaying) synthStartNote(); drawSynthState(); }
+        if (s_synthMode == 0) {
+            if (s_synthOct < 3) { s_synthOct++; if (s_synthPlaying) synthStartNote(); }
+        } else if (s_synthMode == 1) {
+            if (s_seqBpm < 300) s_seqBpm += 10;   // mas rapido
+        } else if (s_seqLen > 0) {
+            if (s_seqDur[s_seqCursor] < SYNTH_MAX_DUR) s_seqDur[s_seqCursor]++;
+        }
+        drawSynthState();
     };
     cbs.onDown = []() {
-        if (s_synthOct > 0) { s_synthOct--; if (s_synthPlaying) synthStartNote(); drawSynthState(); }
+        if (s_synthMode == 0) {
+            if (s_synthOct > 0) { s_synthOct--; if (s_synthPlaying) synthStartNote(); }
+        } else if (s_synthMode == 1) {
+            if (s_seqBpm > 40) s_seqBpm -= 10;    // mas lento
+        } else if (s_seqLen > 0) {
+            if (s_seqDur[s_seqCursor] > 1) s_seqDur[s_seqCursor]--;
+        }
+        drawSynthState();
     };
+    // OK: en TEMPO y SECUENCIA arranca/detiene el bucle; en TOCAR lo maneja el loop (mantener)
+    cbs.onOk = []() {
+        if (s_synthMode != 0) { synthToggleLoop(); drawSynthState(); }
+    };
+    // A: cicla de modo  TOCAR -> TEMPO -> SECUENCIA  (reutiliza los botones)
     cbs.onA = []() {
-        s_synthSustain = !s_synthSustain;
-        if (!s_synthSustain && !buttons.isOkDown()) { synthStopNote(); }
+        s_synthMode = (s_synthMode + 1) % 3;
+        if (s_synthMode != 0) synthStopNote();  // al salir de TOCAR corta el preview
         drawSynthState();
     };
+    // B: en TOCAR agrega la nota actual; en SECUENCIA borra el paso
     cbs.onB = []() {
-        synthStopNote();
+        if (s_synthMode == 0)      synthAddStep();
+        else if (s_synthMode == 2) synthDeleteStep();
         drawSynthState();
     };
-    cbs.onMenu = []() { synthStopNote(); returnToMenu(); };
+    cbs.onMenu = []() { synthStopNote(); speaker.stopTone(); returnToMenu(); };
     buttons.setCallbacks(cbs);
 }
 

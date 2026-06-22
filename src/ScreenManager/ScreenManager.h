@@ -14,6 +14,22 @@ struct ScreenPinConfig
     int tftSclkPin;
 };
 
+// Vista del synth (selector circular + secuenciador en bucle)
+struct SynthView {
+    int  noteIdx;      // 0-11 nota seleccionada
+    int  octave;       // octava mostrada
+    bool playing;      // nota en preview sonando
+    int  mode;         // 0 = TOCAR, 1 = SECUENCIA
+    const int* seqNotes;  // notas de los pasos
+    const int* seqOcts;   // octavas de los pasos (no usadas en dibujo, reservado)
+    const int* seqDurs;   // duracion de cada paso en tiempos (beats)
+    int  seqLen;       // numero de pasos
+    int  seqCursor;    // paso seleccionado (modo SECUENCIA)
+    bool seqPlaying;   // bucle activo
+    int  playStep;     // paso sonando ahora (-1 ninguno)
+    int  tempoBpm;     // tempo del bucle
+};
+
 class ScreenManager {
 
 public:
@@ -61,7 +77,7 @@ public:
     void drawMusicPlayer(const char* name, int noteIdx, int total,
                          bool playing, bool paused);
 
-    void drawSynth(int noteIdx, int octave, bool playing, bool sustain);
+    void drawSynth(const SynthView& v);
 
     void drawLinterna(uint8_t colorIndex, uint8_t brightness, bool on);
 
