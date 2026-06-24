@@ -846,8 +846,12 @@ static const uint16_t SYNTH_KEY_COLORS[12] = {
     GC9A01A_MAGENTA, 0xF81F,
     0xF800
 };
+// Posiciones del anillo de 12 notas (offsets desde el centro, R=56,
+// empezando arriba y girando en sentido horario en pasos de 30°)
+static const int8_t SYNTH_RING_DX[12] = {  0, 28, 48, 56, 48, 28,  0,-28,-48,-56,-48,-28};
+static const int8_t SYNTH_RING_DY[12] = {-56,-48,-28,  0, 28, 48, 56, 48, 28,  0,-28,-48};
 
-void ScreenManager::drawSynth(int noteIdx, int octave, bool playing, bool sustain) {
+void ScreenManager::drawSynth(const SynthView& v) {
     tft.fillScreen(GC9A01A_BLACK);
 
     int16_t x1, y1;
@@ -857,70 +861,110 @@ void ScreenManager::drawSynth(int noteIdx, int octave, bool playing, bool sustai
     tft.setTextSize(2);
     tft.setTextColor(GC9A01A_CYAN);
     tft.getTextBounds("SYNTH", 0, 0, &x1, &y1, &w, &h);
-    tft.setCursor((240 - w) / 2, 10);
+    tft.setCursor((240 - w) / 2, 4);
     tft.print("SYNTH");
 
-    // --- Anillo de color si está sonando ---
-    int cx = 120, cy = 112;
-    if (playing) {
-        uint16_t rc = SYNTH_KEY_COLORS[noteIdx % 12];
-        tft.drawCircle(cx, cy, 58, rc);
-        tft.drawCircle(cx, cy, 59, rc);
-        tft.drawCircle(cx, cy, 60, rc);
+    // --- Etiqueta de modo ---
+    tft.setTextSize(1);
+    const char* modeStr = (v.mode == 0) ? "TOCAR" : (v.mode == 1) ? "TEMPO" : "SECUENCIA";
+    uint16_t modeCol = (v.mode == 0) ? GC9A01A_GREEN : (v.mode == 1) ? GC9A01A_CYAN : GC9A01A_YELLOW;
+    tft.setTextColor(modeCol);
+    tft.getTextBounds(modeStr, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 26);
+    tft.print(modeStr);
+
+    // --- Anillo circular de 12 notas ---
+    const int cx = 120, cy = 92;
+    for (int i = 0; i < 12; i++) {
+        int px = cx + SYNTH_RING_DX[i];
+        int py = cy + SYNTH_RING_DY[i];
+        bool sel = (i == v.noteIdx);
+        if (sel) {
+            tft.fillCircle(px, py, 11, SYNTH_KEY_COLORS[i]);
+            tft.drawCircle(px, py, 12, GC9A01A_WHITE);
+            tft.drawCircle(px, py, 13, GC9A01A_WHITE);
+        } else {
+            tft.fillCircle(px, py, 6, SYNTH_IS_BLACK[i] ? 0x4208 : 0x8410);
+        }
     }
 
     // --- Nombre de nota grande en el centro ---
-    char noteBuf[5];
-    snprintf(noteBuf, sizeof(noteBuf), "%s%d", SYNTH_NOTE_NAMES[noteIdx], octave);
-    tft.setTextSize(4);
-    uint16_t noteColor = playing ? SYNTH_KEY_COLORS[noteIdx % 12] : GC9A01A_WHITE;
-    tft.setTextColor(noteColor);
+    char noteBuf[6];
+    snprintf(noteBuf, sizeof(noteBuf), "%s%d", SYNTH_NOTE_NAMES[v.noteIdx], v.octave);
+    tft.setTextSize(3);
+    tft.setTextColor(v.playing ? SYNTH_KEY_COLORS[v.noteIdx] : GC9A01A_WHITE);
     tft.getTextBounds(noteBuf, 0, 0, &x1, &y1, &w, &h);
-    tft.setCursor((240 - w) / 2, cy - h / 2);
+    tft.setCursor(cx - w / 2, cy - h / 2);
     tft.print(noteBuf);
 
-    // --- Indicador sustain ---
-    if (sustain) {
-        tft.setTextSize(1);
-        tft.setTextColor(GC9A01A_YELLOW);
-        tft.setCursor(10, 48);
-        tft.print("SUSTAIN");
-    }
+    // --- Secuencia (fila de pasos) ---
+    const int sy = 156, bh = 18;
+    if (v.seqLen > 0) {
+        int n = v.seqLen, gap = 3, bw = 20;
+        int total = n * bw + (n - 1) * gap;
+        if (total > 196) { bw = (196 - (n - 1) * gap) / n; total = n * bw + (n - 1) * gap; }
+        int sx = (240 - total) / 2;
+        for (int i = 0; i < n; i++) {
+            int bx = sx + i * (bw + gap);
+            uint16_t bc = SYNTH_KEY_COLORS[v.seqNotes[i]];
+            bool isPlay = (v.playStep == i);
+            bool isCur  = (v.mode == 2 && v.seqCursor == i);
+            if (isPlay) {
+                tft.fillRect(bx, sy, bw, bh, bc);
+            } else {
+                tft.fillRect(bx, sy, bw, bh, 0x2104);
+                tft.drawRect(bx, sy, bw, bh, bc);
+            }
+            if (isCur) tft.drawRect(bx - 1, sy - 1, bw + 2, bh + 2, GC9A01A_WHITE);
 
-    // --- Estado ---
-    tft.setTextSize(1);
-    const char* stStr = playing ? "TOCANDO" : "LISTO";
-    uint16_t stColor  = playing ? GC9A01A_GREEN : GC9A01A_DARKGREY;
-    tft.setTextColor(stColor);
-    tft.getTextBounds(stStr, 0, 0, &x1, &y1, &w, &h);
-    tft.setCursor((240 - w) / 2, 156);
-    tft.print(stStr);
+            tft.setTextSize(1);
+            tft.setTextColor(isPlay ? GC9A01A_BLACK : GC9A01A_WHITE);
+            const char* nm = SYNTH_NOTE_NAMES[v.seqNotes[i]];
+            int tw = (nm[1] ? 11 : 5);
+            tft.setCursor(bx + (bw - tw) / 2, sy + 5);
+            tft.print(nm);
 
-    // --- Teclado de 12 teclas (una octava) ---
-    // 12 teclas × 14px + 11 gaps × 1px = 179px → desde x=30
-    const int KX = 31, KY = 168, KW = 13, KH = 28, KGAP = 1;
-    for (int i = 0; i < 12; i++) {
-        int kx = KX + i * (KW + KGAP);
-        bool isActive = (i == noteIdx);
-        uint16_t col;
-        if (isActive) {
-            col = SYNTH_KEY_COLORS[i];
-        } else if (SYNTH_IS_BLACK[i]) {
-            col = 0x4208; // gris oscuro
-        } else {
-            col = GC9A01A_WHITE;
+            // Badge de duracion (tiempos) cuando es mayor a 1
+            if (v.seqDurs[i] > 1) {
+                char db[4];
+                snprintf(db, sizeof(db), "%d", v.seqDurs[i]);
+                tft.setTextColor(isPlay ? GC9A01A_BLACK : GC9A01A_CYAN);
+                tft.setCursor(bx + bw - 6, sy + 1);
+                tft.print(db);
+            }
         }
-        tft.fillRect(kx, KY, KW, KH, col);
-        if (!isActive) tft.drawRect(kx, KY, KW, KH, GC9A01A_DARKGREY);
+    } else {
+        tft.setTextSize(1);
+        tft.setTextColor(0x4208);
+        const char* e = "(secuencia vacia)";
+        tft.getTextBounds(e, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor((240 - w) / 2, sy + 5);
+        tft.print(e);
     }
 
-    // --- Instrucciones ---
+    // --- Estado del bucle + tempo (resaltado en modo TEMPO) ---
     tft.setTextSize(1);
+    uint16_t tempoCol = (v.mode == 1) ? GC9A01A_CYAN
+                                      : (v.seqPlaying ? GC9A01A_GREEN : GC9A01A_DARKGREY);
+    tft.setTextColor(tempoCol);
+    char tb[20];
+    snprintf(tb, sizeof(tb), "%s  %d BPM", v.seqPlaying ? "LOOP" : "STOP", v.tempoBpm);
+    tft.getTextBounds(tb, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 184);
+    tft.print(tb);
+
+    // --- Instrucciones segun modo ---
     tft.setTextColor(0x4208);
-    tft.setCursor(24, 202);
-    tft.print("<> Nota  ^v Oct  [A] Sus");
-    tft.setCursor(44, 213);
-    tft.print("[OK] Toca  [B] Silencio");
+    if (v.mode == 0) {
+        tft.setCursor(18, 200); tft.print("<> Nota  ^v Oct  OK Toca");
+        tft.setCursor(36, 211); tft.print("B Agregar    A Modo");
+    } else if (v.mode == 1) {
+        tft.setCursor(22, 200); tft.print("^v Tempo   OK Loop");
+        tft.setCursor(70, 211); tft.print("A Modo");
+    } else {
+        tft.setCursor(14, 200); tft.print("<> Paso  ^v Tiempos  OK Loop");
+        tft.setCursor(36, 211); tft.print("B Borrar     A Modo");
+    }
 }
 
 // =====================================================

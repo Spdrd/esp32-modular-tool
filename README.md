@@ -1,5 +1,8 @@
 # ESP32 Modular Tool
 
+<img width="1200" height="1600" alt="image" src="https://github.com/user-attachments/assets/9097a6a4-99fd-48a7-baa6-567aab3ea60c" />
+
+
 Multifunctional tool for ESP32 with GC9A01A circular display. Modular menu-driven system with games and utilities.
 
 ## Features
