@@ -41,22 +41,38 @@ void ButtonManager::processInputs() {
     static unsigned long dTime4 = 0, dTime5 = 0, dTime6 = 0, dTime7 = 0, dTime8 = 0;
     unsigned long now = millis();
 
-    if (readAndDebounce(config.bMenuPin, lastButton1State, menuPressed, dTime1, now) && menuPressed && menuCallback)
-        menuCallback();
-    if (readAndDebounce(config.bAPin,    lastAState,      aPressed,   dTime2, now) && aPressed && aCallback)
-        aCallback();
-    if (readAndDebounce(config.bBPin,    lastBState,      bPressed,   dTime3, now) && bPressed && bCallback)
-        bCallback();
-    if (readAndDebounce(config.bUpPin,   lastUpState,     upPressed,  dTime4, now) && upPressed && upCallback)
-        upCallback();
-    if (readAndDebounce(config.bDownPin, lastDownState,   downPressed,dTime5, now) && downPressed && downCallback)
-        downCallback();
-    if (readAndDebounce(config.bLeftPin, lastLeftState,   leftPressed,dTime6, now) && leftPressed && leftCallback)
-        leftCallback();
-    if (readAndDebounce(config.bRightPin,lastRightState,  rightPressed,dTime7, now) && rightPressed && rightCallback)
-        rightCallback();
-    if (readAndDebounce(config.bOkPin,   lastOkState,     okPressed,  dTime8, now) && okPressed && okCallback)
-        okCallback();
+    if (readAndDebounce(config.bMenuPin, lastButton1State, menuPressed, dTime1, now) && menuPressed) {
+        Serial.println("[BTN] MENU");
+        if (menuCallback) menuCallback();
+    }
+    if (readAndDebounce(config.bAPin,    lastAState,      aPressed,   dTime2, now) && aPressed) {
+        Serial.println("[BTN] A");
+        if (aCallback) aCallback();
+    }
+    if (readAndDebounce(config.bBPin,    lastBState,      bPressed,   dTime3, now) && bPressed) {
+        Serial.println("[BTN] B");
+        if (bCallback) bCallback();
+    }
+    if (readAndDebounce(config.bUpPin,   lastUpState,     upPressed,  dTime4, now) && upPressed) {
+        Serial.println("[BTN] UP");
+        if (upCallback) upCallback();
+    }
+    if (readAndDebounce(config.bDownPin, lastDownState,   downPressed,dTime5, now) && downPressed) {
+        Serial.println("[BTN] DOWN");
+        if (downCallback) downCallback();
+    }
+    if (readAndDebounce(config.bLeftPin, lastLeftState,   leftPressed,dTime6, now) && leftPressed) {
+        Serial.println("[BTN] LEFT");
+        if (leftCallback) leftCallback();
+    }
+    if (readAndDebounce(config.bRightPin,lastRightState,  rightPressed,dTime7, now) && rightPressed) {
+        Serial.println("[BTN] RIGHT");
+        if (rightCallback) rightCallback();
+    }
+    if (readAndDebounce(config.bOkPin,   lastOkState,     okPressed,  dTime8, now) && okPressed) {
+        Serial.println("[BTN] OK");
+        if (okCallback) okCallback();
+    }
 }
 
 void ButtonManager::executeActions() {
