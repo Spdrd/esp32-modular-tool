@@ -13,6 +13,7 @@
 #include "MorseCode/MorseCode.h"
 #include "SpeakerManager/SpeakerManager.h"
 #include "LinternaManager/LinternaManager.h"
+#include "EspNowManager/EspNowManager.h"
 #include "audio/Aerodynamic.h"
 #include "audio/GetLucky.h"
 #include "audio/NeverGonnaGiveYouUp.h"
@@ -49,6 +50,10 @@
 // --- LINTERNA PIN ---
 #define LINTERNA_PIN 32
 
+// --- CAM CAR (ESP-NOW) ---
+// MAC del vehiculo ESP32-S3
+#define CAMCAR_MAC {0x80, 0xB5, 0x4E, 0xC6, 0xF9, 0x1C}
+
 // --- MENU STRUCTS ---
 struct MenuItem {
     const char* name;
@@ -75,6 +80,7 @@ extern Game2048           game2048;
 extern MorseCode          morse;
 extern SpeakerManager     speaker;
 extern LinternaManager    linterna;
+extern EspNowManager      camCar;
 
 // --- MENU STATE ---
 extern int currentSection;
@@ -116,4 +122,6 @@ void enterCanvas();
 void enterTimer();
 void enterSynth();
 void enterLinterna();
+void enterSirena();
+void enterCamCar();
 void enterSong(const Song& song);

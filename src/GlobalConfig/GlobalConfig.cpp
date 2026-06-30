@@ -38,6 +38,9 @@ MorseCode morse;
 SpeakerManager speaker(SPEAKER_PIN, SPEAKER_CHANNEL);
 LinternaManager linterna;
 
+static EspNowPeerConfig camCarConfig = { .mac = CAMCAR_MAC };
+EspNowManager camCar(camCarConfig);
+
 // =====================================================
 // MENU DATA
 // =====================================================
@@ -81,6 +84,7 @@ static const MenuItem toolsItems[] = {
     {"Morse",       enterMorse},
     {"Synth",       enterSynth},
     {"Linterna",    enterLinterna},
+    {"Sirena",      enterSirena},
 };
 
 static const MenuItem musicItems[] = {
@@ -94,13 +98,18 @@ static const MenuItem musicItems[] = {
     {"Riptide",           []() { enterSong(SONG_RIPTIDE); }},
 };
 
+static const MenuItem devicesItems[] = {
+    {"Cam Car", enterCamCar},
+};
+
 static const MenuSection menuSections[] = {
     {"Tests",      testItems,      9},
     {"Pantalla",   displayItems,   4},
     {"Info",       infoItems,      2},
     {"Juegos",     gamesItems,     4},
-    {"Herramientas",toolsItems,    7},
+    {"Herramientas",toolsItems,    8},
     {"Musica",     musicItems,     8},
+    {"Mis Dispositivos", devicesItems, 1},
 };
 
 const MenuSection* sections = menuSections;
@@ -811,6 +820,225 @@ void enterLinterna() {
     cbs.onUp    = []() { linterna.brightnessUp(); drawLinternaState(); };
     cbs.onDown  = []() { linterna.brightnessDown(); drawLinternaState(); };
     cbs.onMenu  = []() { linterna.turnOff(); returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// SIRENA  (bocina + LED)
+// =====================================================
+
+static const int   SIRENA_NUM_PATTERNS = 3;
+static const char* SIRENA_NAMES[SIRENA_NUM_PATTERNS] = { "Policia", "Wail", "Yelp" };
+
+static bool          s_sirenaOn       = false;
+static int           s_sirenaPattern  = 0;
+static uint8_t       s_sirenaBright   = 200;
+static unsigned long s_sirenaT0       = 0;
+static unsigned long s_sirenaLastSwap = 0;
+static bool          s_sirenaPhase    = false;
+
+static void drawSirenaState() {
+    screen.drawSirena(SIRENA_NAMES[s_sirenaPattern], s_sirenaOn, s_sirenaBright);
+}
+
+static void sirenaAllOff() {
+    speaker.stopTone();
+    linterna.turnOff();
+}
+
+static void sirenaLoop() {
+    if (!s_sirenaOn) return;
+    unsigned long now = millis();
+
+    if (s_sirenaPattern == 0) {
+        // Policia: dos tonos alternados + azul/rojo
+        if (now - s_sirenaLastSwap >= 450) {
+            s_sirenaLastSwap = now;
+            s_sirenaPhase = !s_sirenaPhase;
+            speaker.playTone(s_sirenaPhase ? 700 : 500);
+            if (s_sirenaPhase) linterna.showColor(255, 0, 0, s_sirenaBright);
+            else               linterna.showColor(0, 0, 255, s_sirenaBright);
+        }
+        return;
+    }
+
+    // Wail / Yelp: barrido de frecuencia (lento / rapido)
+    static unsigned long lastUpd = 0;
+    if (now - lastUpd < 15) return;
+    lastUpd = now;
+
+    unsigned long period = (s_sirenaPattern == 1) ? 2400 : 500;
+    unsigned long t = (now - s_sirenaT0) % period;
+    float ph  = (float)t / (float)period;
+    float tri = (ph < 0.5f) ? (ph * 2.0f) : (2.0f - ph * 2.0f);
+    int freq  = 400 + (int)(tri * 700.0f);
+    speaker.playTone((uint16_t)freq);
+
+    if (s_sirenaPattern == 1) {
+        // Wail: rojo con brillo pulsante
+        uint8_t b = (uint8_t)(40 + tri * (float)(s_sirenaBright - 40));
+        linterna.showColor(255, 0, 0, b);
+    } else {
+        // Yelp: rojo/blanco rapido
+        if (tri > 0.5f) linterna.showColor(255, 255, 255, s_sirenaBright);
+        else            linterna.showColor(255, 0,   0,   s_sirenaBright);
+    }
+}
+
+static void sirenaToggle() {
+    s_sirenaOn = !s_sirenaOn;
+    if (s_sirenaOn) {
+        s_sirenaT0       = millis();
+        s_sirenaLastSwap = 0;
+        s_sirenaPhase    = false;
+    } else {
+        sirenaAllOff();
+    }
+}
+
+void enterSirena() {
+    s_sirenaOn      = false;
+    s_sirenaPattern = 0;
+    s_sirenaBright  = 200;
+    speaker.stop();
+    linterna.turnOff();
+    drawSirenaState();
+    itemLoopCallback = sirenaLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk = []() { sirenaToggle(); drawSirenaState(); };
+    cbs.onRight = []() {
+        s_sirenaPattern = (s_sirenaPattern + 1) % SIRENA_NUM_PATTERNS;
+        s_sirenaT0 = millis(); s_sirenaLastSwap = 0;
+        drawSirenaState();
+    };
+    cbs.onLeft = []() {
+        s_sirenaPattern = (s_sirenaPattern + SIRENA_NUM_PATTERNS - 1) % SIRENA_NUM_PATTERNS;
+        s_sirenaT0 = millis(); s_sirenaLastSwap = 0;
+        drawSirenaState();
+    };
+    cbs.onUp = []() {
+        s_sirenaBright = (uint8_t)min(255, (int)s_sirenaBright + 25);
+        drawSirenaState();
+    };
+    cbs.onDown = []() {
+        s_sirenaBright = (uint8_t)max(25, (int)s_sirenaBright - 25);
+        drawSirenaState();
+    };
+    cbs.onMenu = []() { sirenaAllOff(); s_sirenaOn = false; returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// MIS DISPOSITIVOS — CAM CAR (ESP-NOW)
+// =====================================================
+
+static CommandType   s_ccLastCmd       = CMD_STOP;
+static unsigned long s_ccLastSendMs    = 0;
+static bool          s_ccVideoActive   = false;  // true si la pantalla muestra video
+static uint32_t      s_ccFpsCounter    = 0;
+static uint32_t      s_ccFpsValue      = 0;
+static unsigned long s_ccFpsWindowMs   = 0;
+
+static const char* ccCmdName(CommandType c) {
+    switch (c) {
+        case CMD_FORWARD:  return "ADELANTE";
+        case CMD_BACKWARD: return "ATRAS";
+        case CMD_LEFT:     return "IZQUIERDA";
+        case CMD_RIGHT:    return "DERECHA";
+        default:           return "STOP";
+    }
+}
+
+static bool ccIsLinked() {
+    return camCar.isActive()
+        && camCar.getFramesReceived() > 0
+        && (millis() - camCar.getLastRxMs() < 2000);
+}
+
+static void drawCamCarStatusState() {
+    screen.drawCamCarStatus(camCar.isActive(), ccCmdName(s_ccLastCmd), ccIsLinked());
+    s_ccVideoActive = false;
+}
+
+// Lee direccion mantenida (sin pasar por callbacks de flanco)
+static CommandType camCarReadCommand() {
+    if (buttons.isUpDown())    return CMD_FORWARD;
+    if (buttons.isDownDown())  return CMD_BACKWARD;
+    if (buttons.isLeftDown())  return CMD_LEFT;
+    if (buttons.isRightDown()) return CMD_RIGHT;
+    return CMD_STOP;
+}
+
+static void camCarLoop() {
+    if (!camCar.isActive()) return;
+    unsigned long now = millis();
+
+    // Comando: reenviar si cambia o cada 150ms (refresco anti-perdida de paquete)
+    CommandType cmd = camCarReadCommand();
+    if (cmd != s_ccLastCmd || now - s_ccLastSendMs >= 150) {
+        camCar.sendCommand(cmd);
+        s_ccLastCmd    = cmd;
+        s_ccLastSendMs = now;
+        if (!s_ccVideoActive) drawCamCarStatusState();
+    }
+
+    bool linked = ccIsLinked();
+
+    if (camCar.hasFrame()) {
+        screen.showJpeg((uint8_t*)camCar.getFrameBuffer(), camCar.getFrameSize(), 160, 120);
+        screen.drawCamCarOverlay(ccCmdName(s_ccLastCmd), true, s_ccFpsValue);
+        camCar.clearFrame();
+        s_ccVideoActive = true;
+        s_ccFpsCounter++;
+    } else if (s_ccVideoActive && !linked) {
+        // Se perdio la señal de video: volver a pantalla de estado
+        drawCamCarStatusState();
+    }
+
+    if (now - s_ccFpsWindowMs >= 1000) {
+        s_ccFpsValue    = s_ccFpsCounter;
+        s_ccFpsCounter  = 0;
+        s_ccFpsWindowMs = now;
+    }
+}
+
+void enterCamCar() {
+    s_ccLastCmd     = CMD_STOP;
+    s_ccLastSendMs  = 0;
+    s_ccVideoActive = false;
+    s_ccFpsCounter  = 0;
+    s_ccFpsValue    = 0;
+    s_ccFpsWindowMs = millis();
+
+    speaker.stop();
+    camCar.begin();  // ESP-NOW se enciende al entrar; [A] lo apaga/enciende para ahorrar bateria
+    drawCamCarStatusState();
+    itemLoopCallback = camCarLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk = []() {
+        if (camCar.isActive()) camCar.sendCommand(CMD_STOP);
+        s_ccLastCmd = CMD_STOP;
+        if (!s_ccVideoActive) drawCamCarStatusState();
+    };
+    cbs.onA = []() {
+        if (camCar.isActive()) {
+            camCar.sendCommand(CMD_STOP);
+            camCar.end();
+        } else {
+            camCar.begin();
+        }
+        s_ccLastCmd = CMD_STOP;
+        drawCamCarStatusState();
+    };
+    cbs.onMenu = []() {
+        if (camCar.isActive()) {
+            camCar.sendCommand(CMD_STOP);
+            camCar.end();
+        }
+        returnToMenu();
+    };
     buttons.setCallbacks(cbs);
 }
 

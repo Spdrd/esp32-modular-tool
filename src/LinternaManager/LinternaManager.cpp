@@ -66,6 +66,12 @@ void LinternaManager::turnOff() {
     apply();
 }
 
+void LinternaManager::showColor(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
+    FastLED.setBrightness(bright);
+    fill_solid(s_led, LINTERNA_NUM_LEDS, CRGB(r, g, b));
+    FastLED.show();
+}
+
 const char* LinternaManager::getColorName() const {
     return LINTERNA_COLOR_NAMES[colorIndex];
 }

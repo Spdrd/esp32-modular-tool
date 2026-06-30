@@ -1050,6 +1050,134 @@ void ScreenManager::drawLinterna(uint8_t colorIndex, uint8_t brightness, bool on
 }
 
 // =====================================================
+// DRAW SIRENA
+// =====================================================
+
+void ScreenManager::drawSirena(const char* pattern, bool on, uint8_t brightness) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+
+    // Título
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_RED);
+    tft.getTextBounds("SIRENA", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 10);
+    tft.print("SIRENA");
+    tft.drawFastHLine(20, 30, 200, GC9A01A_DARKGREY);
+
+    // Círculo central tipo baliza
+    int cx = 120, cy = 104, cr = 48;
+    uint16_t col = on ? GC9A01A_RED : (uint16_t)GC9A01A_DARKGREY;
+    tft.fillCircle(cx, cy, cr, col);
+    tft.drawCircle(cx, cy, cr + 2, on ? (uint16_t)GC9A01A_BLUE : (uint16_t)0x4208);
+    tft.drawCircle(cx, cy, cr + 3, on ? (uint16_t)GC9A01A_BLUE : (uint16_t)0x4208);
+
+    // Estado ON/OFF dentro del círculo
+    tft.setTextSize(2);
+    tft.setTextColor(on ? GC9A01A_WHITE : GC9A01A_DARKGREY);
+    const char* st = on ? "ON" : "OFF";
+    tft.getTextBounds(st, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(cx - w / 2, cy - h / 2);
+    tft.print(st);
+
+    // Patrón
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_CYAN);
+    char pbuf[24];
+    snprintf(pbuf, sizeof(pbuf), "Patron: %s", pattern);
+    tft.getTextBounds(pbuf, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 168);
+    tft.print(pbuf);
+
+    // Barra de brillo del LED
+    const int bx = 30, by = 184, bw = 180, bh = 7;
+    tft.drawRect(bx, by, bw, bh, GC9A01A_DARKGREY);
+    int filled = ((int)brightness * bw) / 255;
+    if (filled > 0) tft.fillRect(bx, by, filled, bh, GC9A01A_RED);
+
+    char pct[8];
+    sprintf(pct, "%d%%", (brightness * 100) / 255);
+    tft.setTextColor(GC9A01A_LIGHTGREY);
+    tft.getTextBounds(pct, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(cx - w / 2, 196);
+    tft.print(pct);
+
+    // Instrucciones
+    tft.setTextColor(0x4208);
+    tft.setCursor(10, 215);
+    tft.print("OK On/Off  <> Patron  ^v Brillo");
+}
+
+// =====================================================
+// DRAW CAM CAR
+// =====================================================
+
+void ScreenManager::drawCamCarStatus(bool active, const char* cmdName, bool linked) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_CYAN);
+    tft.getTextBounds("CAM CAR", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 10);
+    tft.print("CAM CAR");
+    tft.drawFastHLine(20, 34, 200, GC9A01A_DARKGREY);
+
+    // Estado del enlace ESP-NOW
+    tft.setTextSize(1);
+    tft.setTextColor(active ? (linked ? GC9A01A_GREEN : GC9A01A_ORANGE) : GC9A01A_DARKGREY);
+    const char* st = !active ? "ESP-NOW apagado"
+                    : linked ? "Enlazado"
+                             : "Esperando video...";
+    tft.getTextBounds(st, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor((240 - w) / 2, 48);
+    tft.print(st);
+
+    // Icono de direccion central
+    int cx = 120, cy = 120, r = 50;
+    tft.drawCircle(cx, cy, r, active ? GC9A01A_CYAN : (uint16_t)0x4208);
+    tft.drawCircle(cx, cy, r - 1, active ? GC9A01A_CYAN : (uint16_t)0x4208);
+
+    tft.setTextSize(3);
+    tft.setTextColor(active ? GC9A01A_WHITE : GC9A01A_DARKGREY);
+    tft.getTextBounds(cmdName, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(cx - w / 2, cy - h / 2);
+    tft.print(cmdName);
+
+    tft.setTextSize(1);
+    tft.setTextColor(0x4208);
+    tft.setCursor(8, 200);
+    tft.print("^v<> Mover  OK Stop  A ESP-NOW");
+    tft.setCursor(40, 211);
+    tft.print("MENU Salir");
+}
+
+void ScreenManager::drawCamCarOverlay(const char* cmdName, bool linked, uint32_t fps) {
+    // HUD compacto dibujado encima del frame de video ya pintado.
+    tft.fillRect(0, 0, 240, 14, GC9A01A_BLACK);
+    tft.setTextSize(1);
+    tft.setTextColor(linked ? GC9A01A_GREEN : GC9A01A_ORANGE);
+    tft.setCursor(4, 3);
+    tft.print(linked ? "LIVE" : "...");
+
+    tft.setTextColor(GC9A01A_CYAN);
+    tft.setCursor(60, 3);
+    tft.print(cmdName);
+
+    char fb[12];
+    snprintf(fb, sizeof(fb), "%lu fps", (unsigned long)fps);
+    tft.setTextColor(GC9A01A_WHITE);
+    int16_t x1, y1; uint16_t w, h;
+    tft.getTextBounds(fb, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(236 - w, 3);
+    tft.print(fb);
+}
+
+// =====================================================
 // SHOW TEXT LINES
 // =====================================================
 

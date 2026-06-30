@@ -45,7 +45,13 @@ public:
 
     void setCallbacks(ButtonActionCallbacks callbacks);
 
-    bool isOkDown() const { return digitalRead(config.bOkPin) == LOW; }
+    bool isOkDown()    const { return digitalRead(config.bOkPin)    == LOW; }
+    bool isUpDown()    const { return digitalRead(config.bUpPin)    == LOW; }
+    bool isDownDown()  const { return digitalRead(config.bDownPin)  == LOW; }
+    bool isLeftDown()  const { return digitalRead(config.bLeftPin)  == LOW; }
+    bool isRightDown() const { return digitalRead(config.bRightPin) == LOW; }
+    bool isADown()     const { return digitalRead(config.bAPin)     == LOW; }
+    bool isBDown()     const { return digitalRead(config.bBPin)     == LOW; }
 
 private:
     ButtonPinConfig config;

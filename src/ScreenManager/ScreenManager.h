@@ -81,6 +81,14 @@ public:
 
     void drawLinterna(uint8_t colorIndex, uint8_t brightness, bool on);
 
+    void drawSirena(const char* pattern, bool on, uint8_t brightness);
+
+    // Pantalla de control del Cam Car: si hasVideo, dibuja el frame JPEG
+    // recibido a pantalla completa con overlay de comando; si no, una
+    // vista de estado simple con icono de direccion.
+    void drawCamCarStatus(bool active, const char* cmdName, bool linked);
+    void drawCamCarOverlay(const char* cmdName, bool linked, uint32_t fps);
+
     Adafruit_GC9A01A tft;
 
 private:

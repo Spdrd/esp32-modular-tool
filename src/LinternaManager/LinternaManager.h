@@ -17,6 +17,10 @@ public:
     void brightnessDown();
     void turnOff();
 
+    // Fija un color crudo directo (para efectos como la sirena).
+    // No altera el estado guardado de la linterna.
+    void showColor(uint8_t r, uint8_t g, uint8_t b, uint8_t bright);
+
     bool    isOn()          const { return on; }
     uint8_t getBrightness() const { return brightness; }
     uint8_t getColorIndex() const { return colorIndex; }
