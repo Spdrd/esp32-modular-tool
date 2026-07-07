@@ -3,6 +3,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_GC9A01A.h>
 #include <TJpg_Decoder.h>
+#include "../DoomGame/DoomGame.h"
 
 struct ScreenPinConfig
 {
@@ -40,7 +41,8 @@ public:
     void update(String text);
     void clear();
 
-    void showJpeg(uint8_t* jpgBuffer, uint32_t jpgSize, int jpg_w, int jpg_h);
+    // Retorna true si el frame parece valido, false si es mayormente negro (basura).
+    bool showJpeg(uint8_t* jpgBuffer, uint32_t jpgSize, int jpg_w, int jpg_h);
 
     void showTextLines(
         String line1,
@@ -88,6 +90,33 @@ public:
     // vista de estado simple con icono de direccion.
     void drawCamCarStatus(bool active, const char* cmdName, bool linked);
     void drawCamCarOverlay(const char* cmdName, bool linked, uint32_t fps);
+
+    // ---- Nuevos juegos ----
+    void drawPong(int ballX, int ballY, int playerY, int aiY,
+                  int pScore, int aScore, bool gameOver, bool playerWon);
+
+    void drawBreakout(const bool bricks[][7], int rows, int cols,
+                      int brickW, int brickH, int padX, int ballX, int ballY,
+                      int score, int lives, bool launched, bool gameOver, bool won);
+
+    void drawFlappy(int birdY, int pipeX, int gapY, int score, bool gameOver, bool started);
+
+    void drawInvaders(const bool inv[][6], int rows, int cols,
+                      int invOfsX, int invOfsY, int spacing,
+                      int shipX, int score,
+                      int bulletX, int bulletY, bool bulletActive,
+                      int invBulletX, int invBulletY, bool invBulletActive,
+                      bool gameOver, bool won);
+
+    void drawMinesweeper(const bool revealed[][9], const bool flagged[][9],
+                         const bool mine[][9], const int adj[][9],
+                         int rows, int cols, int cx, int cy,
+                         int flagsLeft, int state);
+
+    void drawDoom(float px, float py, float angle,
+                  int health, int ammo, int kills,
+                  bool isShooting, bool gameOver, bool allDead,
+                  const DoomGame::Enemy* enemies, int numEnemies);
 
     Adafruit_GC9A01A tft;
 

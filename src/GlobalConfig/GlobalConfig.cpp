@@ -41,28 +41,16 @@ LinternaManager linterna;
 static EspNowPeerConfig camCarConfig = { .mac = CAMCAR_MAC };
 EspNowManager camCar(camCarConfig);
 
+PongGame        pong;
+BreakoutGame    breakout;
+FlappyGame      flappy;
+InvadersGame    invaders;
+MinesweeperGame minesweeper;
+DoomGame        doom;
+
 // =====================================================
 // MENU DATA
 // =====================================================
-
-static const MenuItem testItems[] = {
-    {"Menu",   enterTestMenu},
-    {"A",      enterTestA},
-    {"B",      enterTestB},
-    {"UP",     enterTestUp},
-    {"DOWN",   enterTestDown},
-    {"LEFT",   enterTestLeft},
-    {"RIGHT",  enterTestRight},
-    {"OK",     enterTestOk},
-    {"All",    enterTestAll},
-};
-
-static const MenuItem displayItems[] = {
-    {"Rojo",   enterFillRed},
-    {"Verde",  enterFillGreen},
-    {"Azul",   enterFillBlue},
-    {"Limpiar",enterClear},
-};
 
 static const MenuItem infoItems[] = {
     {"Version 1.0", enterVersion},
@@ -70,10 +58,16 @@ static const MenuItem infoItems[] = {
 };
 
 static const MenuItem gamesItems[] = {
-    {"Snake",  enterSnake},
-    {"Simon",  enterSimon},
-    {"Tetris", enterTetris},
-    {"2048",   enterGame2048},
+    {"Snake",        enterSnake},
+    {"Simon",        enterSimon},
+    {"Tetris",       enterTetris},
+    {"2048",         enterGame2048},
+    {"Pong",         enterPong},
+    {"Breakout",     enterBreakout},
+    {"Flappy Bird",  enterFlappy},
+    {"Invaders",     enterInvaders},
+    {"Buscaminas",   enterMinesweeper},
+    {"DOOM",         enterDoom},
 };
 
 static const MenuItem toolsItems[] = {
@@ -103,10 +97,8 @@ static const MenuItem devicesItems[] = {
 };
 
 static const MenuSection menuSections[] = {
-    {"Tests",      testItems,      9},
-    {"Pantalla",   displayItems,   4},
     {"Info",       infoItems,      2},
-    {"Juegos",     gamesItems,     4},
+    {"Juegos",     gamesItems,    10},
     {"Herramientas",toolsItems,    8},
     {"Musica",     musicItems,     8},
     {"Mis Dispositivos", devicesItems, 1},
@@ -271,20 +263,62 @@ static void drawTetrisState() {
                       tetris.getHeldPiece(), heldCells);
 }
 
+// DAS para tetris
+static unsigned long s_tetDasStart  = 0;
+static unsigned long s_tetDasRepeat = 0;
+static int  s_tetDasDir   = 0; // -1=izq, 1=der, 0=nada
+static unsigned long s_tetDropRepeat = 0;
+static const unsigned long TET_DAS_DELAY  = 220;
+static const unsigned long TET_DAS_PERIOD = 60;
+static const unsigned long TET_DROP_PERIOD = 50;
+
 static void tetrisLoop() {
-    if (tetris.update()) drawTetrisState();
+    bool redraw = tetris.update();
+    if (tetris.isGameOver()) { if (redraw) drawTetrisState(); return; }
+
+    unsigned long now = millis();
+
+    // Soft drop continuo mientras down está pulsado
+    if (buttons.isDownDown() && now - s_tetDropRepeat >= TET_DROP_PERIOD) {
+        tetris.softDrop();
+        s_tetDropRepeat = now;
+        redraw = true;
+    }
+
+    // DAS lateral
+    int dir = 0;
+    if      (buttons.isLeftDown())  dir = -1;
+    else if (buttons.isRightDown()) dir =  1;
+
+    if (dir != 0) {
+        if (dir != s_tetDasDir) {
+            (dir < 0) ? tetris.moveLeft() : tetris.moveRight();
+            redraw = true;
+            s_tetDasStart  = now;
+            s_tetDasRepeat = now;
+            s_tetDasDir    = dir;
+        } else if (now - s_tetDasStart >= TET_DAS_DELAY &&
+                   now - s_tetDasRepeat >= TET_DAS_PERIOD) {
+            (dir < 0) ? tetris.moveLeft() : tetris.moveRight();
+            redraw = true;
+            s_tetDasRepeat = now;
+        }
+    } else {
+        s_tetDasDir = 0;
+    }
+
+    if (redraw) drawTetrisState();
 }
 
 void enterTetris() {
     tetris.reset();
+    s_tetDasDir = 0; s_tetDasStart = 0; s_tetDasRepeat = 0; s_tetDropRepeat = 0;
     drawTetrisState();
     itemLoopCallback = tetrisLoop;
 
     ButtonActionCallbacks cbs;
     cbs.onUp    = []() { tetris.hardDrop();   drawTetrisState(); };
-    cbs.onDown  = []() { tetris.softDrop();   drawTetrisState(); };
-    cbs.onLeft  = []() { tetris.moveLeft();   drawTetrisState(); };
-    cbs.onRight = []() { tetris.moveRight();  drawTetrisState(); };
+    // left/right/down manejados por held en tetrisLoop; no se asignan callbacks
     cbs.onA     = []() {
         if (tetris.isGameOver()) { tetris.reset(); drawTetrisState(); }
         else { tetris.rotate();    drawTetrisState(); }
@@ -638,6 +672,269 @@ static void snakeLoop() {
     }
 }
 
+// =====================================================
+// PONG
+// =====================================================
+
+static void drawPongState() {
+    screen.drawPong(pong.getBallX(), pong.getBallY(),
+                    pong.getPlayerY(), pong.getAiY(),
+                    pong.getPlayerScore(), pong.getAiScore(),
+                    pong.isGameOver(), pong.playerWon());
+}
+
+static void pongLoop() {
+    bool moved = false;
+    if (buttons.isUpDown())   { pong.moveUp();   moved = true; }
+    if (buttons.isDownDown()) { pong.moveDown(); moved = true; }
+    bool updated = pong.update();
+    if (updated || moved) drawPongState();
+}
+
+void enterPong() {
+    pong.reset();
+    drawPongState();
+    itemLoopCallback = pongLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk   = []() { if (pong.isGameOver()) { pong.reset(); drawPongState(); } };
+    cbs.onMenu = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// BREAKOUT
+// =====================================================
+
+static void drawBreakoutState() {
+    screen.drawBreakout(
+        reinterpret_cast<const bool(*)[7]>(breakout.getBricks()),
+        BreakoutGame::ROWS, BreakoutGame::COLS,
+        BreakoutGame::BRICK_W, BreakoutGame::BRICK_H,
+        breakout.getPaddleX(), breakout.getBallX(), breakout.getBallY(),
+        breakout.getScore(), breakout.getLives(),
+        breakout.isLaunched(), breakout.isGameOver(), breakout.isWon());
+}
+
+static void breakoutLoop() {
+    bool moved = false;
+    if (buttons.isLeftDown())  { breakout.moveLeft();  moved = true; }
+    if (buttons.isRightDown()) { breakout.moveRight(); moved = true; }
+    bool updated = breakout.update();
+    if (updated || moved) drawBreakoutState();
+}
+
+void enterBreakout() {
+    breakout.reset();
+    drawBreakoutState();
+    itemLoopCallback = breakoutLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk    = []() {
+        if (breakout.isGameOver() || breakout.isWon()) { breakout.reset(); drawBreakoutState(); }
+        else breakout.launch();
+    };
+    cbs.onMenu  = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// FLAPPY BIRD
+// =====================================================
+
+static void drawFlappyState() {
+    screen.drawFlappy(flappy.getBirdY(), flappy.getPipeX(), flappy.getGapY(),
+                      flappy.getScore(), flappy.isGameOver(), flappy.isStarted());
+}
+
+static void flappyLoop() {
+    if (flappy.update()) drawFlappyState();
+}
+
+void enterFlappy() {
+    flappy.reset();
+    drawFlappyState();
+    itemLoopCallback = flappyLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk  = []() {
+        if (flappy.isGameOver()) { flappy.reset(); drawFlappyState(); }
+        else flappy.flap();
+    };
+    cbs.onA    = []() {
+        if (flappy.isGameOver()) { flappy.reset(); drawFlappyState(); }
+        else flappy.flap();
+    };
+    cbs.onMenu = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// SPACE INVADERS
+// =====================================================
+
+static void drawInvadersState() {
+    screen.drawInvaders(
+        reinterpret_cast<const bool(*)[6]>(invaders.getGrid()),
+        InvadersGame::ROWS, InvadersGame::COLS,
+        invaders.getInvOfsX(), invaders.getInvOfsY(), InvadersGame::INV_SPACING,
+        invaders.getShipX(), invaders.getScore(),
+        invaders.getBullet().x, invaders.getBullet().y, invaders.getBullet().active,
+        invaders.getInvBullet().x, invaders.getInvBullet().y, invaders.getInvBullet().active,
+        invaders.isGameOver(), invaders.isWon());
+}
+
+static unsigned long s_invMoveMs = 0;
+
+static void invadersLoop() {
+    bool moved = false;
+    unsigned long now = millis();
+    if (now - s_invMoveMs >= 80) {
+        if (buttons.isLeftDown())  { invaders.moveLeft();  moved = true; s_invMoveMs = now; }
+        if (buttons.isRightDown()) { invaders.moveRight(); moved = true; s_invMoveMs = now; }
+    }
+    bool updated = invaders.update();
+    if (updated || moved) drawInvadersState();
+}
+
+void enterInvaders() {
+    invaders.reset();
+    s_invMoveMs = 0;
+    drawInvadersState();
+    itemLoopCallback = invadersLoop;
+
+    ButtonActionCallbacks cbs;
+    // left/right son held en invadersLoop; solo disparo en callbacks
+    cbs.onOk    = []() {
+        if (invaders.isGameOver() || invaders.isWon()) { invaders.reset(); drawInvadersState(); }
+        else invaders.shoot();
+    };
+    cbs.onA     = []() {
+        if (!invaders.isGameOver() && !invaders.isWon()) invaders.shoot();
+    };
+    cbs.onMenu  = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// MINESWEEPER
+// =====================================================
+
+static void drawMinesweeperState() {
+    screen.drawMinesweeper(
+        reinterpret_cast<const bool(*)[9]>(minesweeper.getRevealed()),
+        reinterpret_cast<const bool(*)[9]>(minesweeper.getFlagged()),
+        reinterpret_cast<const bool(*)[9]>(minesweeper.getMines()),
+        reinterpret_cast<const int (*)[9]>(minesweeper.getAdjs()),
+        MinesweeperGame::ROWS, MinesweeperGame::COLS,
+        minesweeper.getCursorX(), minesweeper.getCursorY(),
+        minesweeper.getFlagsLeft(), (int)minesweeper.getState());
+}
+
+// DAS para minesweeper: delay inicial antes de repetir, luego periodo rapido
+static unsigned long s_msDasStart  = 0; // cuando se empezo a mantener
+static unsigned long s_msDasRepeat = 0; // ultimo movimiento repetido
+static int s_msDasDx = 0, s_msDaDy = 0; // direccion activa
+static const unsigned long MS_DAS_DELAY  = 380; // ms antes de empezar a repetir
+static const unsigned long MS_DAS_PERIOD = 130; // ms entre repeticiones
+
+static void minesweeperLoop() {
+    if (minesweeper.getState() != MinesweeperGame::PLAYING) return;
+
+    int dx = 0, dy = 0;
+    if      (buttons.isLeftDown())  dx = -1;
+    else if (buttons.isRightDown()) dx =  1;
+    else if (buttons.isUpDown())    dy = -1;
+    else if (buttons.isDownDown())  dy =  1;
+
+    unsigned long now = millis();
+
+    if (dx != 0 || dy != 0) {
+        bool dirChanged = (dx != s_msDasDx || dy != s_msDaDy);
+        if (dirChanged) {
+            // Primera pulsacion: mover inmediatamente y arrancar DAS
+            minesweeper.moveCursor(dx, dy);
+            drawMinesweeperState();
+            s_msDasStart  = now;
+            s_msDasRepeat = now;
+            s_msDasDx = dx; s_msDaDy = dy;
+        } else if (now - s_msDasStart >= MS_DAS_DELAY &&
+                   now - s_msDasRepeat >= MS_DAS_PERIOD) {
+            minesweeper.moveCursor(dx, dy);
+            drawMinesweeperState();
+            s_msDasRepeat = now;
+        }
+    } else {
+        s_msDasDx = 0; s_msDaDy = 0;
+    }
+}
+
+void enterMinesweeper() {
+    minesweeper.reset();
+    s_msDasDx = 0; s_msDaDy = 0; s_msDasStart = 0; s_msDasRepeat = 0;
+    drawMinesweeperState();
+    itemLoopCallback = minesweeperLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk    = []() {
+        if (minesweeper.getState() != MinesweeperGame::PLAYING) {
+            minesweeper.reset(); drawMinesweeperState();
+        } else {
+            minesweeper.reveal(); drawMinesweeperState();
+        }
+    };
+    cbs.onA     = []() {
+        if (minesweeper.getState() == MinesweeperGame::PLAYING) {
+            minesweeper.toggleFlag(); drawMinesweeperState();
+        }
+    };
+    cbs.onMenu  = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// DOOM
+// =====================================================
+
+static void drawDoomState() {
+    screen.drawDoom(doom.getPlayerX(), doom.getPlayerY(), doom.getAngle(),
+                    doom.getHealth(), doom.getAmmo(), doom.getKills(),
+                    doom.isShooting(), doom.isGameOver(), doom.isAllDead(),
+                    doom.getEnemies(), DoomGame::MAX_ENEMIES);
+}
+
+static void doomLoop() {
+    bool redraw = doom.update();
+
+    // Held-button movement (continuo)
+    bool moved = false;
+    if (buttons.isUpDown())    { doom.moveForward();  moved = true; }
+    if (buttons.isDownDown())  { doom.moveBackward(); moved = true; }
+    if (buttons.isLeftDown())  { doom.turnLeft();     moved = true; }
+    if (buttons.isRightDown()) { doom.turnRight();    moved = true; }
+
+    if (redraw || moved) drawDoomState();
+}
+
+void enterDoom() {
+    doom.reset();
+    drawDoomState();
+    itemLoopCallback = doomLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onA    = []() { doom.shoot(); drawDoomState(); };
+    cbs.onOk   = []() {
+        if (doom.isGameOver() || doom.isAllDead()) { doom.reset(); drawDoomState(); }
+        else { doom.shoot(); drawDoomState(); }
+    };
+    cbs.onMenu = returnToMenu;
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// SNAKE
+// =====================================================
+
 void enterSnake() {
     snake.reset();
     drawSnakeState();
@@ -986,11 +1283,16 @@ static void camCarLoop() {
     bool linked = ccIsLinked();
 
     if (camCar.hasFrame()) {
-        screen.showJpeg((uint8_t*)camCar.getFrameBuffer(), camCar.getFrameSize(), 160, 120);
-        screen.drawCamCarOverlay(ccCmdName(s_ccLastCmd), true, s_ccFpsValue);
+        bool valid = screen.showJpeg((uint8_t*)camCar.getFrameBuffer(), camCar.getFrameSize(), 160, 120);
+        if (valid) {
+            screen.drawCamCarOverlay(ccCmdName(s_ccLastCmd), true, s_ccFpsValue);
+            s_ccVideoActive = true;
+            s_ccFpsCounter++;
+        } else if (s_ccVideoActive) {
+            // Frame negro descartado: re-dibujar overlay sobre el ultimo frame valido
+            screen.drawCamCarOverlay(ccCmdName(s_ccLastCmd), true, s_ccFpsValue);
+        }
         camCar.clearFrame();
-        s_ccVideoActive = true;
-        s_ccFpsCounter++;
     } else if (s_ccVideoActive && !linked) {
         // Se perdio la señal de video: volver a pantalla de estado
         drawCamCarStatusState();

@@ -14,6 +14,12 @@
 #include "SpeakerManager/SpeakerManager.h"
 #include "LinternaManager/LinternaManager.h"
 #include "EspNowManager/EspNowManager.h"
+#include "PongGame/PongGame.h"
+#include "BreakoutGame/BreakoutGame.h"
+#include "FlappyGame/FlappyGame.h"
+#include "InvadersGame/InvadersGame.h"
+#include "MinesweeperGame/MinesweeperGame.h"
+#include "DoomGame/DoomGame.h"
 #include "audio/Aerodynamic.h"
 #include "audio/GetLucky.h"
 #include "audio/NeverGonnaGiveYouUp.h"
@@ -81,6 +87,12 @@ extern MorseCode          morse;
 extern SpeakerManager     speaker;
 extern LinternaManager    linterna;
 extern EspNowManager      camCar;
+extern PongGame           pong;
+extern BreakoutGame       breakout;
+extern FlappyGame         flappy;
+extern InvadersGame       invaders;
+extern MinesweeperGame    minesweeper;
+extern DoomGame           doom;
 
 // --- MENU STATE ---
 extern int currentSection;
@@ -124,4 +136,10 @@ void enterSynth();
 void enterLinterna();
 void enterSirena();
 void enterCamCar();
+void enterPong();
+void enterBreakout();
+void enterFlappy();
+void enterInvaders();
+void enterMinesweeper();
+void enterDoom();
 void enterSong(const Song& song);

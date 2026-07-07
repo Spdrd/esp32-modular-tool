@@ -1,8 +1,13 @@
 // ScreenManager.cpp
 
 #include "ScreenManager.h"
+#include <math.h>
 
 static ScreenManager* screenInstance = nullptr;
+
+// Contadores para deteccion de frame negro (reiniciados antes de cada decode)
+static uint32_t s_jpegBlackPx = 0;
+static uint32_t s_jpegTotalPx = 0;
 
 // =====================================================
 // CALLBACK JPEG
@@ -20,13 +25,16 @@ bool tftOutput(
         return false;
     }
 
-    screenInstance->tft.drawRGBBitmap(
-        x,
-        y,
-        bitmap,
-        w,
-        h
-    );
+    screenInstance->tft.drawRGBBitmap(x, y, bitmap, w, h);
+
+    // Muestrear cada 8 pixeles para no impactar velocidad
+    uint32_t count = (uint32_t)w * h;
+    for (uint32_t i = 0; i < count; i += 8) {
+        uint16_t px = bitmap[i];
+        // RGB565: negro o casi negro  (R<2, G<4, B<2)
+        if (px < 0x0842u) s_jpegBlackPx++;
+        s_jpegTotalPx++;
+    }
 
     return true;
 }
@@ -112,7 +120,7 @@ void ScreenManager::clear() {
 // SHOW JPEG
 // =====================================================
 
-void ScreenManager::showJpeg(
+bool ScreenManager::showJpeg(
     uint8_t* jpgBuffer,
     uint32_t jpgSize,
     int jpg_w,
@@ -123,7 +131,7 @@ void ScreenManager::showJpeg(
 
         Serial.println("JPEG invalido");
 
-        return;
+        return false;
     }
 
     // =========================================
@@ -147,30 +155,27 @@ void ScreenManager::showJpeg(
     // DIBUJAR JPEG
     // =========================================
 
-    TJpgDec.drawJpg(
-        posX,
-        posY,
-        jpgBuffer,
-        jpgSize
-    );
+    s_jpegBlackPx = 0;
+    s_jpegTotalPx = 0;
+
+    TJpgDec.drawJpg(posX, posY, jpgBuffer, jpgSize);
 
     // =========================================
     // DEBUG
     // =========================================
 
-    Serial.println("JPEG mostrado");
+    // Determinar si el frame es mayormente negro (>80% de muestras)
+    bool isBlack = (s_jpegTotalPx > 0) &&
+                   (s_jpegBlackPx * 10 >= s_jpegTotalPx * 8);
 
-    Serial.print("Width: ");
-    Serial.println(jpg_w);
+    Serial.print("[CAM] frame ");
+    Serial.print(isBlack ? "NEGRO" : "OK");
+    Serial.print("  black=");
+    Serial.print(s_jpegBlackPx);
+    Serial.print("/");
+    Serial.println(s_jpegTotalPx);
 
-    Serial.print("Height: ");
-    Serial.println(jpg_h);
-
-    Serial.print("X: ");
-    Serial.println(posX);
-
-    Serial.print("Y: ");
-    Serial.println(posY);
+    return !isBlack;
 }
 
 // =====================================================
@@ -1274,4 +1279,446 @@ void ScreenManager::showTextLines(
     tft.setCursor(centerX - (w3 / 2), y3);
 
     tft.println(line3);
+}
+
+// =====================================================
+// DRAW PONG
+// =====================================================
+
+void ScreenManager::drawPong(int ballX, int ballY, int playerY, int aiY,
+                              int pScore, int aScore, bool gameOver, bool playerWon) {
+    const int OFX = 20, OFY = 42;
+    const int W = 200, H = 150;
+    const int PAD_H = 24, PAD_W = 4, BALL = 4;
+
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // Score
+    tft.setTextColor(GC9A01A_WHITE); tft.setTextSize(2);
+    char buf[8];
+    sprintf(buf, "%d", aScore);
+    tft.setCursor(OFX + 60, OFY - 28); tft.print(buf);
+    sprintf(buf, "%d", pScore);
+    tft.setCursor(OFX + 120, OFY - 28); tft.print(buf);
+    tft.setCursor(OFX + 96, OFY - 28); tft.print(":");
+
+    // Border
+    tft.drawRect(OFX, OFY, W, H, GC9A01A_DARKGREY);
+    tft.drawFastVLine(OFX + W / 2, OFY, H, 0x39C7); // center dashed line (grey)
+
+    // AI paddle (left)
+    tft.fillRect(OFX + 6, OFY + aiY - PAD_H / 2, PAD_W, PAD_H, GC9A01A_CYAN);
+    // Player paddle (right)
+    tft.fillRect(OFX + W - 6 - PAD_W, OFY + playerY - PAD_H / 2, PAD_W, PAD_H, GC9A01A_GREEN);
+    // Ball
+    tft.fillRect(OFX + ballX, OFY + ballY, BALL, BALL, GC9A01A_WHITE);
+
+    if (gameOver) {
+        tft.setTextSize(2);
+        tft.setTextColor(playerWon ? GC9A01A_GREEN : GC9A01A_RED);
+        const char* msg = playerWon ? "GANASTE!" : "PERDISTE";
+        int16_t x1, y1; uint16_t w, h;
+        tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+        tft.setCursor(120 - w / 2, 115);
+        tft.println(msg);
+    } else {
+        tft.setTextSize(1); tft.setTextColor(0x39C7);
+        tft.setCursor(OFX + 2, OFY + H + 3); tft.print("^v mover  [MENU] salir");
+    }
+}
+
+// =====================================================
+// DRAW BREAKOUT
+// =====================================================
+
+void ScreenManager::drawBreakout(const bool bricks[][7], int rows, int cols,
+                                  int brickW, int brickH, int padX,
+                                  int ballX, int ballY,
+                                  int score, int lives, bool launched,
+                                  bool gameOver, bool won) {
+    const int OFX = 29, OFY = 22;
+    const int BALL_R = 3;
+    const int PAD_W = 32, PAD_Y = 168, PAD_H = 4;
+    const int BRICK_OFY = 14;
+
+    static const uint16_t BRICK_COLORS[] = {
+        GC9A01A_RED, GC9A01A_ORANGE, GC9A01A_YELLOW, GC9A01A_GREEN, GC9A01A_CYAN
+    };
+
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // HUD
+    tft.setTextColor(GC9A01A_WHITE); tft.setTextSize(1);
+    tft.setCursor(OFX, OFY - 12);
+    char buf[20]; sprintf(buf, "Puntos:%d", score);
+    tft.print(buf);
+    tft.setCursor(OFX + 110, OFY - 12);
+    sprintf(buf, "Vidas:%d", lives);
+    tft.print(buf);
+
+    // Bricks
+    for (int r = 0; r < rows; r++) {
+        uint16_t c16 = BRICK_COLORS[r % 5];
+        for (int c = 0; c < cols; c++) {
+            if (!bricks[r][c]) continue;
+            int bx = OFX + c * brickW;
+            int by = OFY + BRICK_OFY + r * brickH;
+            tft.fillRect(bx + 1, by + 1, brickW - 2, brickH - 2, c16);
+        }
+    }
+
+    // Paddle
+    tft.fillRect(OFX + padX, OFY + PAD_Y, PAD_W, PAD_H, GC9A01A_WHITE);
+
+    // Ball
+    tft.fillCircle(OFX + ballX, OFY + ballY, BALL_R, GC9A01A_WHITE);
+
+    if (!launched) {
+        tft.setTextColor(GC9A01A_YELLOW); tft.setTextSize(1);
+        tft.setCursor(55, 215); tft.print("[OK] lanzar");
+    }
+    if (gameOver) {
+        tft.setTextColor(GC9A01A_RED); tft.setTextSize(2);
+        tft.setCursor(60, 110); tft.print("GAME OVER");
+    }
+    if (won) {
+        tft.setTextColor(GC9A01A_GREEN); tft.setTextSize(2);
+        tft.setCursor(72, 110); tft.print("GANASTE!");
+    }
+}
+
+// =====================================================
+// DRAW FLAPPY
+// =====================================================
+
+void ScreenManager::drawFlappy(int birdY, int pipeX, int gapY, int score,
+                                bool gameOver, bool started) {
+    const int OFX = 15, OFY = 22;
+    const int W = 210, H = 195;
+    const int PIPE_W = 18, GAP = 52;
+    const int BIRD_X = 38, BIRD_R = 5;
+
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // Sky gradient hint (top bar)
+    tft.fillRect(OFX, OFY, W, 20, 0x0319); // dark blue
+
+    // Pipes
+    uint16_t pipeColor = 0x0400; // dark green
+    if (pipeX >= 0 && pipeX < W) {
+        // Top pipe
+        tft.fillRect(OFX + pipeX, OFY, PIPE_W, gapY, pipeColor);
+        tft.fillRect(OFX + pipeX - 2, OFY + gapY - 6, PIPE_W + 4, 6, GC9A01A_GREEN);
+        // Bottom pipe
+        int botY = gapY + GAP;
+        tft.fillRect(OFX + pipeX, OFY + botY, PIPE_W, H - botY, pipeColor);
+        tft.fillRect(OFX + pipeX - 2, OFY + botY, PIPE_W + 4, 6, GC9A01A_GREEN);
+    }
+
+    // Ground
+    tft.fillRect(OFX, OFY + H - 8, W, 8, 0x4A00); // brown
+
+    // Bird (yellow circle with beak)
+    tft.fillCircle(OFX + BIRD_X, OFY + birdY, BIRD_R, GC9A01A_YELLOW);
+    tft.fillRect(OFX + BIRD_X + BIRD_R - 1, OFY + birdY - 1, 4, 3, GC9A01A_ORANGE);
+
+    // Score
+    tft.setTextColor(GC9A01A_WHITE); tft.setTextSize(2);
+    char buf[8]; sprintf(buf, "%d", score);
+    int16_t x1, y1; uint16_t w, h;
+    tft.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(120 - w / 2, OFY + 4);
+    tft.print(buf);
+
+    if (!started) {
+        tft.setTextColor(GC9A01A_YELLOW); tft.setTextSize(1);
+        tft.setCursor(OFX + 50, OFY + H / 2 + 20); tft.print("[OK] para volar");
+    }
+    if (gameOver) {
+        tft.setTextColor(GC9A01A_RED); tft.setTextSize(2);
+        tft.setCursor(68, 120); tft.print("CRASH!");
+        tft.setTextSize(1); tft.setTextColor(GC9A01A_WHITE);
+        tft.setCursor(60, 140); tft.print("[OK] reiniciar");
+    }
+}
+
+// =====================================================
+// DRAW INVADERS
+// =====================================================
+
+void ScreenManager::drawInvaders(const bool inv[][6], int rows, int cols,
+                                  int invOfsX, int invOfsY, int spacing,
+                                  int shipX, int score,
+                                  int bulletX, int bulletY, bool bulletActive,
+                                  int invBulletX, int invBulletY, bool invBulletActive,
+                                  bool gameOver, bool won) {
+    const int OFX = 20, OFY = 25;
+    const int INV_W = 12, INV_H = 8;
+    const int SHIP_W = 14, SHIP_Y = 170;
+
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // Score
+    tft.setTextColor(GC9A01A_WHITE); tft.setTextSize(1);
+    char buf[20]; sprintf(buf, "Puntos: %d", score);
+    tft.setCursor(OFX + 40, OFY - 14); tft.print(buf);
+
+    // Invaders
+    static const uint16_t INV_COLORS[] = {GC9A01A_RED, GC9A01A_MAGENTA, GC9A01A_CYAN};
+    for (int r = 0; r < rows; r++) {
+        uint16_t c16 = INV_COLORS[r % 3];
+        for (int c = 0; c < cols; c++) {
+            if (!inv[r][c]) continue;
+            int ix = OFX + invOfsX + c * spacing - INV_W / 2;
+            int iy = OFY + invOfsY + r * 22 - INV_H / 2;
+            tft.fillRect(ix, iy, INV_W, INV_H, c16);
+            // Antenas
+            tft.drawPixel(ix + 2, iy - 2, c16);
+            tft.drawPixel(ix + INV_W - 3, iy - 2, c16);
+        }
+    }
+
+    // Player ship (triangle-ish)
+    tft.fillTriangle(
+        OFX + shipX, OFY + SHIP_Y - 10,
+        OFX + shipX - SHIP_W / 2, OFY + SHIP_Y,
+        OFX + shipX + SHIP_W / 2, OFY + SHIP_Y,
+        GC9A01A_GREEN
+    );
+
+    // Base line
+    tft.drawFastHLine(OFX, OFY + SHIP_Y + 2, 200, GC9A01A_DARKGREY);
+
+    // Bullets
+    if (bulletActive)
+        tft.fillRect(OFX + bulletX - 1, OFY + bulletY - 4, 2, 8, GC9A01A_WHITE);
+    if (invBulletActive)
+        tft.fillRect(OFX + invBulletX - 1, OFY + invBulletY - 4, 2, 8, GC9A01A_RED);
+
+    if (gameOver) {
+        tft.setTextColor(GC9A01A_RED); tft.setTextSize(2);
+        tft.setCursor(60, 105); tft.print("GAME OVER");
+    }
+    if (won) {
+        tft.setTextColor(GC9A01A_GREEN); tft.setTextSize(2);
+        tft.setCursor(66, 105); tft.print("GANASTE!");
+    }
+}
+
+// =====================================================
+// DRAW MINESWEEPER
+// =====================================================
+
+void ScreenManager::drawMinesweeper(const bool revealed[][9], const bool flagged[][9],
+                                     const bool mine[][9], const int adj[][9],
+                                     int rows, int cols, int cx, int cy,
+                                     int flagsLeft, int state) {
+    const int CELL = 22;
+    const int OFX = (240 - cols * CELL) / 2;
+    const int OFY = 28;
+
+    static const uint16_t ADJ_COLORS[] = {
+        GC9A01A_BLACK,   // 0 (no se muestra)
+        GC9A01A_BLUE,    // 1
+        GC9A01A_GREEN,   // 2
+        GC9A01A_RED,     // 3
+        0x000F,          // 4 dark blue
+        0x7800,          // 5 dark red
+        GC9A01A_CYAN,    // 6
+        GC9A01A_WHITE,   // 7
+        GC9A01A_DARKGREY // 8
+    };
+
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // Header
+    tft.setTextColor(GC9A01A_WHITE); tft.setTextSize(1);
+    char buf[20]; sprintf(buf, "Minas: %d", flagsLeft);
+    tft.setCursor(10, 10); tft.print(buf);
+    if (state == 1) { tft.setTextColor(GC9A01A_GREEN); tft.setCursor(140, 10); tft.print("GANASTE!"); }
+    if (state == 2) { tft.setTextColor(GC9A01A_RED);   tft.setCursor(140, 10); tft.print("BOOM!"); }
+
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+            int x = OFX + c * CELL;
+            int y = OFY + r * CELL;
+            bool isCursor = (c == cx && r == cy);
+
+            if (revealed[r][c]) {
+                tft.fillRect(x + 1, y + 1, CELL - 2, CELL - 2, 0x2945); // medium grey
+                if (mine[r][c]) {
+                    tft.fillCircle(x + CELL/2, y + CELL/2, 5, GC9A01A_RED);
+                } else if (adj[r][c] > 0) {
+                    tft.setTextColor(ADJ_COLORS[adj[r][c]]);
+                    tft.setTextSize(1);
+                    tft.setCursor(x + CELL/2 - 3, y + CELL/2 - 4);
+                    tft.print(adj[r][c]);
+                }
+            } else if (flagged[r][c]) {
+                tft.fillRect(x + 1, y + 1, CELL - 2, CELL - 2, 0x4208); // dark grey
+                tft.fillRect(x + CELL/2 - 2, y + 4, 4, 10, GC9A01A_RED); // flag pole + flag
+                tft.fillTriangle(x + CELL/2 + 1, y + 4, x + CELL/2 + 1, y + 10, x + CELL/2 + 7, y + 7, GC9A01A_RED);
+            } else {
+                uint16_t fillC = isCursor ? 0x630C : 0x4A49; // highlight cursor
+                tft.fillRect(x + 1, y + 1, CELL - 2, CELL - 2, fillC);
+            }
+
+            // Grid lines
+            tft.drawRect(x, y, CELL, CELL, GC9A01A_BLACK);
+        }
+    }
+
+    // Controls hint
+    tft.setTextColor(0x39C7); tft.setTextSize(1);
+    tft.setCursor(15, 225); tft.print("[OK]rev [A]flag");
+}
+
+// =====================================================
+// DRAW DOOM  (raycaster)
+// =====================================================
+
+void ScreenManager::drawDoom(float px, float py, float angle,
+                              int health, int ammo, int kills,
+                              bool isShooting, bool gameOver, bool allDead,
+                              const DoomGame::Enemy* enemies, int numEnemies) {
+    const int VIEW_W = 240;
+    const int VIEW_H = 155; // 3D view height
+    const int HUD_Y  = VIEW_H;
+    const float FOV_HALF = 0.55f; // ~63 degree FOV plane factor
+
+    // Ceiling and floor
+    tft.fillRect(0, 0, VIEW_W, VIEW_H / 2, 0x0319);    // dark blue ceiling
+    tft.fillRect(0, VIEW_H / 2, VIEW_W, VIEW_H / 2, 0x2945); // grey floor
+
+    float dirX = cosf(angle), dirY = sinf(angle);
+    float plnX = -dirY * FOV_HALF, plnY = dirX * FOV_HALF;
+
+    // Raycasting — one column at a time
+    for (int col = 0; col < VIEW_W; col++) {
+        float camX = 2.0f * col / (float)VIEW_W - 1.0f;
+        float rayDirX = dirX + plnX * camX;
+        float rayDirY = dirY + plnY * camX;
+
+        int mapX = (int)px, mapY = (int)py;
+
+        float deltaDX = (fabsf(rayDirX) < 1e-6f) ? 1e6f : fabsf(1.0f / rayDirX);
+        float deltaDY = (fabsf(rayDirY) < 1e-6f) ? 1e6f : fabsf(1.0f / rayDirY);
+
+        float sideDistX, sideDistY;
+        int stepX, stepY;
+
+        if (rayDirX < 0) { stepX = -1; sideDistX = (px - mapX) * deltaDX; }
+        else             { stepX =  1; sideDistX = (mapX + 1.0f - px) * deltaDX; }
+        if (rayDirY < 0) { stepY = -1; sideDistY = (py - mapY) * deltaDY; }
+        else             { stepY =  1; sideDistY = (mapY + 1.0f - py) * deltaDY; }
+
+        bool hit = false; int side = 0;
+        for (int step = 0; step < 20 && !hit; step++) {
+            if (sideDistX < sideDistY) { sideDistX += deltaDX; mapX += stepX; side = 0; }
+            else                        { sideDistY += deltaDY; mapY += stepY; side = 1; }
+            if (mapX >= 0 && mapX < DoomGame::MAP_W && mapY >= 0 && mapY < DoomGame::MAP_H)
+                if (DoomGame::MAP[mapY][mapX] == 1) hit = true;
+        }
+
+        if (!hit) continue;
+
+        float perpWallDist = (side == 0)
+            ? (sideDistX - deltaDX)
+            : (sideDistY - deltaDY);
+        if (perpWallDist < 0.01f) perpWallDist = 0.01f;
+
+        int lineH = (int)(VIEW_H / perpWallDist);
+        int drawStart = max(0, VIEW_H / 2 - lineH / 2);
+        int drawEnd   = min(VIEW_H - 1, VIEW_H / 2 + lineH / 2);
+
+        // Wall color: side 0 = lighter, side 1 = darker; closer = brighter
+        float bright = 1.0f / (perpWallDist * 0.4f + 0.5f);
+        if (bright > 1.0f) bright = 1.0f;
+        if (side == 1) bright *= 0.6f;
+
+        uint8_t r8 = (uint8_t)(bright * 180);
+        uint8_t g8 = (uint8_t)(bright * 80);
+        uint8_t b8 = (uint8_t)(bright * 60);
+        uint16_t wallColor = tft.color565(r8, g8, b8);
+
+        tft.drawFastVLine(col, drawStart, drawEnd - drawStart + 1, wallColor);
+    }
+
+    // Enemy sprites (simple billboard: project to screen)
+    for (int i = 0; i < numEnemies; i++) {
+        if (!enemies[i].alive) continue;
+        float spX = enemies[i].x - px;
+        float spY = enemies[i].y - py;
+        float invDet = 1.0f / (plnX * dirY - dirX * plnY);
+        float transX =  invDet * (dirY * spX - dirX * spY);
+        float transY =  invDet * (-plnY * spX + plnX * spY);
+        if (transY <= 0.1f) continue;
+
+        int sprScreenX = (int)(VIEW_W / 2.0f * (1.0f + transX / transY));
+        int sprH = abs((int)(VIEW_H / transY));
+        int sprW = sprH;
+        int drawSX = max(0, sprScreenX - sprW / 2);
+        int drawEX = min(VIEW_W - 1, sprScreenX + sprW / 2);
+        int drawSY = max(0, VIEW_H / 2 - sprH / 2);
+        int drawEY = min(VIEW_H - 1, VIEW_H / 2 + sprH / 2);
+
+        // Simple sprite: magenta rectangle
+        float brightSp = 1.0f / (transY * 0.5f + 0.5f);
+        if (brightSp > 1.0f) brightSp = 1.0f;
+        uint16_t spColor = tft.color565((uint8_t)(brightSp * 200), 0, (uint8_t)(brightSp * 200));
+        tft.fillRect(drawSX, drawSY, drawEX - drawSX, drawEY - drawSY, spColor);
+    }
+
+    // Crosshair
+    tft.drawFastHLine(115, VIEW_H / 2, 10, GC9A01A_WHITE);
+    tft.drawFastVLine(120, VIEW_H / 2 - 5, 10, GC9A01A_WHITE);
+
+    // Gun sprite (when shooting: bigger)
+    int gunW = isShooting ? 50 : 40;
+    int gunH = isShooting ? 35 : 28;
+    tft.fillRect(120 - gunW / 2, VIEW_H - gunH, gunW, gunH,
+                 isShooting ? GC9A01A_ORANGE : GC9A01A_DARKGREY);
+    tft.fillRect(120 - 4, VIEW_H - gunH - 8, 8, 10, 0x4208); // barrel
+
+    // HUD bar
+    tft.fillRect(0, HUD_Y, 240, 240 - HUD_Y, GC9A01A_BLACK);
+    tft.drawFastHLine(0, HUD_Y, 240, GC9A01A_DARKGREY);
+
+    // Health bar
+    tft.setTextColor(GC9A01A_RED); tft.setTextSize(1);
+    tft.setCursor(4, HUD_Y + 5); tft.print("HP");
+    int hpBarW = (health * 60) / 100;
+    tft.fillRect(20, HUD_Y + 4, hpBarW, 8, GC9A01A_RED);
+    tft.drawRect(20, HUD_Y + 4, 60, 8, GC9A01A_DARKGREY);
+
+    // Ammo
+    tft.setTextColor(GC9A01A_YELLOW); tft.setTextSize(1);
+    char buf[24];
+    sprintf(buf, "AMMO:%d", ammo);
+    tft.setCursor(90, HUD_Y + 5); tft.print(buf);
+
+    // Kills
+    tft.setTextColor(GC9A01A_CYAN); tft.setTextSize(1);
+    sprintf(buf, "K:%d/5", kills);
+    tft.setCursor(160, HUD_Y + 5); tft.print(buf);
+
+    // Controls hint (bottom)
+    tft.setTextColor(0x39C7); tft.setTextSize(1);
+    tft.setCursor(10, HUD_Y + 18);
+    tft.print("^v mov <> giro [A]disp");
+
+    if (gameOver) {
+        tft.fillRect(40, 60, 160, 40, GC9A01A_BLACK);
+        tft.setTextColor(GC9A01A_RED); tft.setTextSize(2);
+        tft.setCursor(52, 70); tft.print("YOU DIED");
+        tft.setTextColor(GC9A01A_WHITE); tft.setTextSize(1);
+        tft.setCursor(55, 92); tft.print("[OK] reiniciar");
+    }
+    if (allDead) {
+        tft.fillRect(40, 60, 160, 40, GC9A01A_BLACK);
+        tft.setTextColor(GC9A01A_GREEN); tft.setTextSize(2);
+        tft.setCursor(50, 70); tft.print("VICTORIA");
+        tft.setTextColor(GC9A01A_WHITE); tft.setTextSize(1);
+        tft.setCursor(55, 92); tft.print("[OK] reiniciar");
+    }
 }

@@ -1,6 +1,7 @@
 #include "EspNowManager.h"
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 
 EspNowManager* EspNowManager::instance = nullptr;
 
@@ -44,6 +45,12 @@ bool EspNowManager::begin() {
         WiFi.mode(WIFI_OFF);
         return false;
     }
+
+    // Fija la tasa PHY a 1 Mbps (preambulo largo, 802.11b): mas lento
+    // pero mucho mas sensible/robusto a distancia y ruido que la tasa
+    // automatica (que suele negociar 6-54 Mbps).
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+    esp_wifi_config_80211_tx_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
 
     instance = this;
     esp_now_register_recv_cb(onRecvStatic);
