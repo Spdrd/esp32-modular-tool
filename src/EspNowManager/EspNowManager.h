@@ -18,6 +18,9 @@ public:
     bool isActive() const { return active; }
 
     void sendCommand(CommandType cmd);
+    bool addPeer(const uint8_t* mac);
+    void removePeer(const uint8_t* mac);
+    bool sendBytes(const uint8_t* mac, const uint8_t* data, int len);
 
     // Video recibido del vehiculo (frame JPEG acumulado)
     bool           hasFrame()      const { return frameReady; }

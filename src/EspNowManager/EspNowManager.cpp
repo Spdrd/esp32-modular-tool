@@ -89,6 +89,28 @@ void EspNowManager::sendCommand(CommandType cmd) {
     esp_now_send(config.mac, (uint8_t*)&pkt, sizeof(pkt));
 }
 
+bool EspNowManager::addPeer(const uint8_t* mac) {
+    if (!active) return false;
+    if (esp_now_is_peer_exist(mac)) return true;
+    esp_now_peer_info_t peer = {};
+    memcpy(peer.peer_addr, mac, 6);
+    peer.channel  = 0;
+    peer.encrypt  = false;
+    return esp_now_add_peer(&peer) == ESP_OK;
+}
+
+void EspNowManager::removePeer(const uint8_t* mac) {
+    if (!active) return;
+    if (esp_now_is_peer_exist(mac)) {
+        esp_now_del_peer(mac);
+    }
+}
+
+bool EspNowManager::sendBytes(const uint8_t* mac, const uint8_t* data, int len) {
+    if (!active) return false;
+    return esp_now_send(mac, data, len) == ESP_OK;
+}
+
 void EspNowManager::clearFrame() {
     frameLen   = 0;
     frameReady = false;
