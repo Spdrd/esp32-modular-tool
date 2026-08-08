@@ -1282,6 +1282,165 @@ void ScreenManager::showTextLines(
 }
 
 // =====================================================
+// DRAW BT KEYBOARD
+// =====================================================
+
+// Dibuja una tecla con su etiqueta centrada. Resaltada = verde.
+static void btKeycap(Adafruit_GC9A01A& tft, int x, int y, int w, int h,
+                     const char* label, bool pressed) {
+    uint16_t fill   = pressed ? GC9A01A_GREEN : 0x2124;      // gris oscuro
+    uint16_t border = pressed ? GC9A01A_WHITE : 0x4A49;
+    uint16_t txt    = pressed ? GC9A01A_BLACK : GC9A01A_WHITE;
+
+    tft.fillRoundRect(x, y, w, h, 4, fill);
+    tft.drawRoundRect(x, y, w, h, 4, border);
+
+    tft.setTextSize(1);
+    tft.setTextColor(txt);
+    int16_t bx, by; uint16_t bw, bh;
+    tft.getTextBounds(label, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor(x + (w - bw) / 2, y + (h - bh) / 2);
+    tft.print(label);
+}
+
+void ScreenManager::drawBtKeyboard(bool active, bool connected,
+                                    const char* deviceName, uint8_t pressedMask) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t bx, by; uint16_t bw, bh;
+
+    // Titulo
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_CYAN);
+    const char* title = "TECLADO";
+    tft.getTextBounds(title, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 16);
+    tft.print(title);
+
+    // Estado de conexion
+    const char* status;
+    uint16_t statusColor;
+    if (!active)        { status = "BT APAGADO";   statusColor = GC9A01A_DARKGREY; }
+    else if (connected) { status = "CONECTADO";    statusColor = GC9A01A_GREEN;    }
+    else                { status = "EMPAREJAR...";  statusColor = GC9A01A_YELLOW;   }
+
+    tft.setTextSize(1);
+    tft.setTextColor(statusColor);
+    tft.getTextBounds(status, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 40);
+    tft.print(status);
+
+    // Nombre visible al emparejar (solo si aun no hay host)
+    if (active && !connected && deviceName) {
+        tft.setTextColor(0x7BEF);
+        tft.getTextBounds(deviceName, 0, 0, &bx, &by, &bw, &bh);
+        tft.setCursor((240 - bw) / 2, 53);
+        tft.print(deviceName);
+    }
+
+    // Cruz WASD: refleja el d-pad fisico (arriba=W, izq=A, abajo=S, der=D)
+    const int KW = 32, KH = 26;
+    btKeycap(tft, 104,  74, KW, KH, "W", pressedMask & 0x01);
+    btKeycap(tft,  66, 104, KW, KH, "A", pressedMask & 0x02);
+    btKeycap(tft, 104, 134, KW, KH, "S", pressedMask & 0x04);
+    btKeycap(tft, 142, 104, KW, KH, "D", pressedMask & 0x08);
+
+    // Fila inferior: teclas de accion
+    btKeycap(tft,  42, 176, 44, 24, "ESC", pressedMask & 0x10);
+    btKeycap(tft,  94, 176, 48, 24, "ENTER", pressedMask & 0x20);
+    btKeycap(tft, 150, 176, 48, 24, "SPACE", pressedMask & 0x40);
+
+    // Leyenda de botones fisicos
+    tft.setTextSize(1);
+    tft.setTextColor(0x39C7);
+    const char* hint = "[B]esc [OK]enter [A]space";
+    tft.getTextBounds(hint, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 208);
+    tft.print(hint);
+}
+
+// =====================================================
+// DRAW MUSIC CONTROL
+// =====================================================
+
+void ScreenManager::drawMusicControl(bool active, bool connected,
+                                      const char* deviceName,
+                                      bool playing, const char* lastAction) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t bx, by; uint16_t bw, bh;
+
+    // Titulo
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_CYAN);
+    const char* title = "MUSICA";
+    tft.getTextBounds(title, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 14);
+    tft.print(title);
+
+    // Estado de conexion
+    const char* status;
+    uint16_t statusColor;
+    if (!active)        { status = "BT APAGADO";  statusColor = GC9A01A_DARKGREY; }
+    else if (connected) { status = "CONECTADO";   statusColor = GC9A01A_GREEN;    }
+    else                { status = "EMPAREJAR..."; statusColor = GC9A01A_YELLOW;   }
+
+    tft.setTextSize(1);
+    tft.setTextColor(statusColor);
+    tft.getTextBounds(status, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 36);
+    tft.print(status);
+
+    if (active && !connected && deviceName) {
+        tft.setTextColor(0x7BEF);
+        tft.getTextBounds(deviceName, 0, 0, &bx, &by, &bw, &bh);
+        tft.setCursor((240 - bw) / 2, 48);
+        tft.print(deviceName);
+    }
+
+    // --- Transporte ---
+    const int CX = 120, CY = 112;
+    uint16_t glyph = connected ? GC9A01A_GREEN : GC9A01A_DARKGREY;
+
+    tft.drawCircle(CX, CY, 34, 0x4A49);
+    if (playing) {
+        // Suena: se muestran las barras de pausa (lo que hara [OK])
+        tft.fillRect(CX - 13, CY - 16, 9, 32, glyph);
+        tft.fillRect(CX +  4, CY - 16, 9, 32, glyph);
+    } else {
+        tft.fillTriangle(CX - 10, CY - 17, CX - 10, CY + 17, CX + 17, CY, glyph);
+    }
+
+    // Anterior / siguiente a los lados
+    uint16_t side = connected ? GC9A01A_WHITE : GC9A01A_DARKGREY;
+    tft.fillTriangle(58, CY - 12, 58, CY + 12, 42, CY, side);
+    tft.fillTriangle(74, CY - 12, 74, CY + 12, 58, CY, side);
+    tft.fillTriangle(182, CY - 12, 182, CY + 12, 198, CY, side);
+    tft.fillTriangle(166, CY - 12, 166, CY + 12, 182, CY, side);
+
+    // Volumen arriba / abajo
+    tft.fillTriangle(CX - 9, 70, CX + 9, 70, CX, 60, side);
+    tft.fillTriangle(CX - 9, 154, CX + 9, 154, CX, 164, side);
+
+    // Etiqueta del ultimo comando enviado
+    if (lastAction && lastAction[0]) {
+        tft.setTextSize(2);
+        tft.setTextColor(GC9A01A_YELLOW);
+        tft.getTextBounds(lastAction, 0, 0, &bx, &by, &bw, &bh);
+        tft.setCursor((240 - bw) / 2, 182);
+        tft.print(lastAction);
+    }
+
+    // Ayuda de botones
+    tft.setTextSize(1);
+    tft.setTextColor(0x39C7);
+    const char* hint = "^v vol  <> pista  [OK] play";
+    tft.getTextBounds(hint, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 210);
+    tft.print(hint);
+}
+
+// =====================================================
 // DRAW PONG
 // =====================================================
 

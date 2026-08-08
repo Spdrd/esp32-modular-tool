@@ -14,6 +14,7 @@
 #include "SpeakerManager/SpeakerManager.h"
 #include "LinternaManager/LinternaManager.h"
 #include "EspNowManager/EspNowManager.h"
+#include "BluetoothManager/BluetoothManager.h"
 #include "PongGame/PongGame.h"
 #include "BreakoutGame/BreakoutGame.h"
 #include "FlappyGame/FlappyGame.h"
@@ -87,6 +88,7 @@ extern MorseCode          morse;
 extern SpeakerManager     speaker;
 extern LinternaManager    linterna;
 extern EspNowManager      camCar;
+extern BluetoothManager   bt;
 extern PongGame           pong;
 extern BreakoutGame       breakout;
 extern FlappyGame         flappy;
@@ -136,6 +138,9 @@ void enterSynth();
 void enterLinterna();
 void enterSirena();
 void enterCamCar();
+void enterTecladoWasd();
+void enterMusicControl();
+void enterBtUnpair();
 void enterPong();
 void enterBreakout();
 void enterFlappy();

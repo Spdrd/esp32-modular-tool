@@ -91,6 +91,15 @@ public:
     void drawCamCarStatus(bool active, const char* cmdName, bool linked);
     void drawCamCarOverlay(const char* cmdName, bool linked, uint32_t fps);
 
+    // Teclado BLE: pressedMask bits 0=W 1=A 2=S 3=D 4=ESC 5=ENTER 6=SPACE
+    void drawBtKeyboard(bool active, bool connected, const char* deviceName,
+                        uint8_t pressedMask);
+
+    // Control multimedia BLE. lastAction = etiqueta transitoria del ultimo
+    // comando enviado ("" si no hay ninguno reciente).
+    void drawMusicControl(bool active, bool connected, const char* deviceName,
+                          bool playing, const char* lastAction);
+
     // ---- Nuevos juegos ----
     void drawPong(int ballX, int ballY, int playerY, int aiY,
                   int pScore, int aScore, bool gameOver, bool playerWon);

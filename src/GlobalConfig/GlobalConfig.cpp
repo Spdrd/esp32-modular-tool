@@ -41,6 +41,15 @@ LinternaManager linterna;
 static EspNowPeerConfig camCarConfig = { .mac = CAMCAR_MAC };
 EspNowManager camCar(camCarConfig);
 
+static BluetoothConfig btConfig = {
+    .deviceName   = "ESP32 Tool",
+    .manufacturer = "J. Diego",
+    .vid          = 0x05AC,   // se anuncia como teclado generico
+    .pid          = 0x820A,
+    .version      = 0x0100
+};
+BluetoothManager bt(btConfig);
+
 PongGame        pong;
 BreakoutGame    breakout;
 FlappyGame      flappy;
@@ -96,12 +105,19 @@ static const MenuItem devicesItems[] = {
     {"Cam Car", enterCamCar},
 };
 
+static const MenuItem bluetoothItems[] = {
+    {"Teclado WASD",     enterTecladoWasd},
+    {"Musica",           enterMusicControl},
+    {"Olvidar vinculos", enterBtUnpair},
+};
+
 static const MenuSection menuSections[] = {
     {"Info",       infoItems,      2},
     {"Juegos",     gamesItems,    10},
     {"Herramientas",toolsItems,    8},
     {"Musica",     musicItems,     8},
     {"Mis Dispositivos", devicesItems, 1},
+    {"Bluetooth",  bluetoothItems, 3},
 };
 
 const MenuSection* sections = menuSections;
@@ -1345,6 +1361,203 @@ void enterCamCar() {
 }
 
 // =====================================================
+// BLUETOOTH - TECLADO WASD
+// =====================================================
+
+// Mapa de botones fisicos -> teclas HID:
+//   UP=W  LEFT=A  DOWN=S  RIGHT=D  B=ESC  OK=ENTER  A=SPACE  MENU=salir
+// Las teclas se mantienen pulsadas mientras el boton este presionado, para
+// que sirvan de verdad en juegos (no son taps sueltos).
+
+static uint8_t s_btKbMask      = 0;
+static bool    s_btKbConnected = false;
+
+static void btKeyboardLoop() {
+    uint8_t keys[6];
+    uint8_t n    = 0;
+    uint8_t mask = 0;
+
+    // mask refleja siempre el estado fisico; el reporte HID solo admite 6
+    if (buttons.isUpDown())    { mask |= 0x01; if (n < 6) keys[n++] = HID_KEY_W;     }
+    if (buttons.isLeftDown())  { mask |= 0x02; if (n < 6) keys[n++] = HID_KEY_A;     }
+    if (buttons.isDownDown())  { mask |= 0x04; if (n < 6) keys[n++] = HID_KEY_S;     }
+    if (buttons.isRightDown()) { mask |= 0x08; if (n < 6) keys[n++] = HID_KEY_D;     }
+    if (buttons.isBDown())     { mask |= 0x10; if (n < 6) keys[n++] = HID_KEY_ESC;   }
+    if (buttons.isOkDown())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_ENTER; }
+    if (buttons.isADown())     { mask |= 0x40; if (n < 6) keys[n++] = HID_KEY_SPACE; }
+
+    // keyboardReport ya descarta envios identicos al anterior
+    bt.keyboardReport(HID_MOD_NONE, keys, n);
+
+    // Redibujar solo cuando cambia algo: el SPI de la pantalla es lento
+    bool conn = bt.isConnected();
+    if (mask != s_btKbMask || conn != s_btKbConnected) {
+        s_btKbMask      = mask;
+        s_btKbConnected = conn;
+        screen.drawBtKeyboard(bt.isActive(), conn, bt.getDeviceName(), mask);
+    }
+}
+
+void enterTecladoWasd() {
+    speaker.stop();
+    bt.begin();   // BLE se enciende al entrar y se apaga al salir con [MENU]
+
+    s_btKbMask      = 0;
+    s_btKbConnected = bt.isConnected();
+    screen.drawBtKeyboard(bt.isActive(), s_btKbConnected, bt.getDeviceName(), 0);
+
+    itemLoopCallback = btKeyboardLoop;
+
+    ButtonActionCallbacks cbs;
+    // Todas las teclas se leen por estado sostenido en btKeyboardLoop.
+    // MENU es el unico que no se envia: sale y apaga la radio.
+    cbs.onMenu = []() {
+        bt.keyReleaseAll();
+        bt.end();
+        returnToMenu();
+    };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// BLUETOOTH - CONTROL DE MUSICA
+// =====================================================
+
+// UP/DOWN=volumen (con repeticion al mantener)  LEFT/RIGHT=pista
+// OK=play/pause  MENU=salir
+//
+// s_mcPlaying es un estado LOCAL: el host no nos informa que esta sonando,
+// solo recibe ordenes. Si la reproduccion se controla desde otro lado, este
+// icono se puede desincronizar.
+static bool          s_mcPlaying    = false;
+static bool          s_mcConnected  = false;
+static const char*   s_mcAction     = "";
+static unsigned long s_mcActionMs   = 0;
+static int           s_mcVolDir     = 0;
+static unsigned long s_mcVolStart   = 0;
+static unsigned long s_mcVolRepeat  = 0;
+
+static const unsigned long MC_ACTION_HOLD_MS = 1000;  // cuanto dura la etiqueta
+static const unsigned long MC_VOL_DELAY_MS   = 400;   // antes de repetir volumen
+static const unsigned long MC_VOL_PERIOD_MS  = 180;   // entre repeticiones
+
+static void drawBtMusicState() {
+    screen.drawMusicControl(bt.isActive(), bt.isConnected(), bt.getDeviceName(),
+                            s_mcPlaying, s_mcAction);
+}
+
+static void mcFlash(const char* label) {
+    s_mcAction   = label;
+    s_mcActionMs = millis();
+}
+
+static void btMusicLoop() {
+    unsigned long now = millis();
+    bool redraw = false;
+
+    // Volumen: primera pulsacion inmediata, luego repeticion al mantener
+    int dir = 0;
+    if      (buttons.isUpDown())   dir =  1;
+    else if (buttons.isDownDown()) dir = -1;
+
+    if (dir != 0) {
+        bool firstPress = (dir != s_mcVolDir);
+        if (firstPress || (now - s_mcVolStart >= MC_VOL_DELAY_MS &&
+                           now - s_mcVolRepeat >= MC_VOL_PERIOD_MS)) {
+            bt.consumerTap(dir > 0 ? HID_CC_VOL_UP : HID_CC_VOL_DOWN);
+            mcFlash(dir > 0 ? "VOL +" : "VOL -");
+            redraw = true;
+            s_mcVolRepeat = now;
+            if (firstPress) { s_mcVolDir = dir; s_mcVolStart = now; }
+        }
+    } else {
+        s_mcVolDir = 0;
+    }
+
+    // Borrar la etiqueta pasado su tiempo
+    if (s_mcActionMs != 0 && now - s_mcActionMs >= MC_ACTION_HOLD_MS) {
+        s_mcAction   = "";
+        s_mcActionMs = 0;
+        redraw = true;
+    }
+
+    bool conn = bt.isConnected();
+    if (conn != s_mcConnected) {
+        s_mcConnected = conn;
+        redraw = true;
+    }
+
+    if (redraw) drawBtMusicState();
+}
+
+void enterMusicControl() {
+    speaker.stop();
+    bt.begin();
+
+    s_mcPlaying   = false;
+    s_mcAction    = "";
+    s_mcActionMs  = 0;
+    s_mcVolDir    = 0;
+    s_mcConnected = bt.isConnected();
+    drawBtMusicState();
+
+    itemLoopCallback = btMusicLoop;
+
+    ButtonActionCallbacks cbs;
+    // UP/DOWN se leen sostenidos en btMusicLoop para poder repetir volumen
+    cbs.onLeft  = []() { bt.consumerTap(HID_CC_PREV); mcFlash("<< PREV"); drawBtMusicState(); };
+    cbs.onRight = []() { bt.consumerTap(HID_CC_NEXT); mcFlash("NEXT >>"); drawBtMusicState(); };
+    cbs.onOk    = []() {
+        bt.consumerTap(HID_CC_PLAY_PAUSE);
+        s_mcPlaying = !s_mcPlaying;
+        mcFlash(s_mcPlaying ? "PLAY" : "PAUSA");
+        drawBtMusicState();
+    };
+    cbs.onMenu  = []() {
+        bt.end();
+        returnToMenu();
+    };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// BLUETOOTH - OLVIDAR VINCULOS
+// =====================================================
+
+// Un host emparejado cachea el descriptor HID y la tabla de servicios: se
+// queda con las capacidades que vio la primera vez y no las vuelve a leer.
+// Para que reconozca un set distinto hay que romper el vinculo de los DOS
+// lados. Esto se encarga del lado del ESP32.
+
+static void drawUnpairPrompt() {
+    int n = bt.getBondedCount();
+    char line1[24];
+    snprintf(line1, sizeof(line1), "Vinculos: %d", n < 0 ? 0 : n);
+    screen.showTextLines(line1, "[OK] borrar todos", "[MENU] salir", GC9A01A_YELLOW);
+}
+
+void enterBtUnpair() {
+    speaker.stop();
+    bt.begin();               // hace falta la radio encendida para consultar
+    drawUnpairPrompt();
+    itemLoopCallback = nullptr;
+
+    ButtonActionCallbacks cbs;
+    cbs.onOk = []() {
+        int removed = bt.clearBonds();
+        char line1[24];
+        snprintf(line1, sizeof(line1), "Borrados: %d", removed < 0 ? 0 : removed);
+        // La radio queda encendida y anunciando para poder emparejar de una vez
+        screen.showTextLines(line1, "Olvidalo tambien", "en el telefono", GC9A01A_GREEN);
+    };
+    cbs.onMenu = []() {
+        bt.end();
+        returnToMenu();
+    };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
 // MENU NAVIGATION
 // =====================================================
 
@@ -1369,24 +1582,28 @@ void itemLoopUpdate() {
 static void onMenuLeft()   {
     currentSection = (currentSection + 1) % sectionCount;
     currentItem = 0;
+    Serial.print("[MENU] seccion: "); Serial.println(sections[currentSection].title);
     renderMenu();
 }
 
 static void onMenuRight()  {
     currentSection = (currentSection - 1 + sectionCount) % sectionCount;
     currentItem = 0;
+    Serial.print("[MENU] seccion: "); Serial.println(sections[currentSection].title);
     renderMenu();
 }
 
 static void onMenuUp()     {
     int count = sections[currentSection].itemCount;
     currentItem = (currentItem - 1 + count) % count;
+    Serial.print("[MENU] item: "); Serial.println(sections[currentSection].items[currentItem].name);
     renderMenu();
 }
 
 static void onMenuDown()   {
     int count = sections[currentSection].itemCount;
     currentItem = (currentItem + 1) % count;
+    Serial.print("[MENU] item: "); Serial.println(sections[currentSection].items[currentItem].name);
     renderMenu();
 }
 
@@ -1394,6 +1611,10 @@ static void onMenuOk()     {
     itemLoopCallback = nullptr;
     buttons.setCallbacks(getItemCallbacks());
     const MenuItem* item = &sections[currentSection].items[currentItem];
+    Serial.print("[MENU] entrar: ");
+    Serial.print(sections[currentSection].title);
+    Serial.print(" > ");
+    Serial.println(item->name);
     if (item->onEnter) item->onEnter();
 }
 
