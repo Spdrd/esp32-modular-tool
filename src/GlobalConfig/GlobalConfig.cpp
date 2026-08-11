@@ -41,6 +41,9 @@ LinternaManager linterna;
 static EspNowPeerConfig camCarConfig = { .mac = CAMCAR_MAC };
 EspNowManager camCar(camCarConfig);
 
+static const uint8_t ledStripMac[6] = LEDSTRIP_MAC;
+EspNowLedManager ledStrip(ledStripMac);
+
 static BluetoothConfig btConfig = {
     .deviceName   = "ESP32 Tool",
     .manufacturer = "J. Diego",
@@ -102,13 +105,14 @@ static const MenuItem musicItems[] = {
 };
 
 static const MenuItem devicesItems[] = {
-    {"Cam Car", enterCamCar},
+    {"Cam Car",  enterCamCar},
+    {"Tira LED", enterLedStrip},
 };
 
 static const MenuItem bluetoothItems[] = {
-    {"Teclado WASD",     enterTecladoWasd},
     {"Musica",           enterMusicControl},
-    {"Olvidar vinculos", enterBtUnpair},
+    {"Teclado WASD",      enterTecladoWasd},
+    {"Teclado Minecraft", enterTecladoMinecraft}
 };
 
 static const MenuSection menuSections[] = {
@@ -116,7 +120,7 @@ static const MenuSection menuSections[] = {
     {"Juegos",     gamesItems,    10},
     {"Herramientas",toolsItems,    8},
     {"Musica",     musicItems,     8},
-    {"Mis Dispositivos", devicesItems, 1},
+    {"Mis Dispositivos", devicesItems, 2},
     {"Bluetooth",  bluetoothItems, 3},
 };
 
@@ -205,6 +209,36 @@ static void simonPlayLose() {
     speaker.play(&s_simonSong, false);
 }
 
+// El LED RGB acompaña a la pantalla con los mismos colores que usa drawSimon()
+// (0=UP verde, 1=DOWN rojo, 2=LEFT azul, 3=RIGHT amarillo).
+static const uint8_t SIMON_LED_RGB[4][3] = {
+    {   0, 255,   0 },  // UP
+    { 255,   0,   0 },  // DOWN
+    {   0,   0, 255 },  // LEFT
+    { 255, 255,   0 },  // RIGHT
+};
+static const uint8_t SIMON_LED_BRIGHT = 160;
+
+static void simonShowLed() {
+    int hl = simon.getHighlight();
+
+    // Al perder, el boton equivocado parpadea en pantalla: el LED sigue el
+    // mismo ritmo apagandose en los frames en que el boton esta apagado.
+    bool off = (hl < 0) ||
+               (simon.getState() == SimonGame::LOSE && !simon.isFlashOn());
+
+    if (off) {
+        linterna.turnOff();
+        return;
+    }
+
+    linterna.showColor(SIMON_LED_RGB[hl][0],
+                       SIMON_LED_RGB[hl][1],
+                       SIMON_LED_RGB[hl][2],
+                       SIMON_LED_BRIGHT);
+}
+
+// Vuelca el estado del juego a las dos salidas: pantalla y LED.
 static void drawSimonState() {
     screen.drawSimon(
         simon.getHighlight(),
@@ -212,6 +246,7 @@ static void drawSimonState() {
         (int)simon.getState(),
         simon.isFlashOn()
     );
+    simonShowLed();
 }
 
 static int s_simonLastHighlight = -1;
@@ -259,7 +294,7 @@ void enterSimon() {
             drawSimonState();
         }
     };
-    cbs.onMenu  = returnToMenu;
+    cbs.onMenu  = []() { linterna.turnOff(); returnToMenu(); };
     buttons.setCallbacks(cbs);
 }
 
@@ -1361,6 +1396,133 @@ void enterCamCar() {
 }
 
 // =====================================================
+// TIRA LED (ESP-NOW)
+// =====================================================
+
+// LEFT/RIGHT elige parametro, UP/DOWN lo ajusta (con repeticion al mantener).
+// Cada cambio se envia solo, limitado a un paquete cada 60ms para no saturar
+// la radio mientras se mantiene pulsado.
+
+enum { LP_EFFECT = 0, LP_BRIGHT, LP_R, LP_G, LP_B, LP_BPS, LP_COUNT };
+
+static int       s_lsParam = LP_EFFECT;
+static LedPacket s_lsPkt   = { LED_FX_SOLID, 128, 255, 80, 0, 20 };
+
+static uint8_t   s_lsBrightBackup = 128;   // para el apagado rapido con [B]
+
+static unsigned long s_lsSendMs   = 0;
+static unsigned long s_lsAdjStart = 0;
+static unsigned long s_lsAdjRep   = 0;
+static int           s_lsAdjDir   = 0;
+
+static const unsigned long LS_SEND_PERIOD_MS = 60;
+static const unsigned long LS_ADJ_DELAY_MS   = 350;
+static const unsigned long LS_ADJ_PERIOD_MS  = 70;
+
+static void drawLedStripState() {
+    screen.drawLedStrip(s_lsParam, s_lsPkt.effect, ledEffectName(s_lsPkt.effect),
+                        s_lsPkt.brightness, s_lsPkt.r, s_lsPkt.g, s_lsPkt.b,
+                        s_lsPkt.bps, ledStrip.isActive(), ledStrip.lastSendOk(),
+                        ledStrip.isBroadcast(),
+                        ledStrip.getSentCount(), ledStrip.getFailCount());
+}
+
+// Envia respetando el limite de ritmo. force ignora el limite ([OK]).
+static void ledStripSend(bool force) {
+    unsigned long now = millis();
+    if (!force && now - s_lsSendMs < LS_SEND_PERIOD_MS) return;
+    s_lsSendMs = now;
+    ledStrip.send(s_lsPkt);
+}
+
+// Aplica un paso al parametro activo, respetando el rango de cada campo.
+static void ledStripAdjust(int dir) {
+    switch (s_lsParam) {
+        case LP_EFFECT: {
+            int v = (int)s_lsPkt.effect + dir;
+            if (v < 0) v = LED_FX_COUNT - 1;
+            if (v >= LED_FX_COUNT) v = 0;
+            s_lsPkt.effect = (uint8_t)v;
+            break;
+        }
+        case LP_BRIGHT: s_lsPkt.brightness = constrain((int)s_lsPkt.brightness + dir * 5, 0, 255); break;
+        case LP_R:      s_lsPkt.r          = constrain((int)s_lsPkt.r          + dir * 5, 0, 255); break;
+        case LP_G:      s_lsPkt.g          = constrain((int)s_lsPkt.g          + dir * 5, 0, 255); break;
+        case LP_B:      s_lsPkt.b          = constrain((int)s_lsPkt.b          + dir * 5, 0, 255); break;
+        // El receptor recorta bps a [1,60]; se limita aqui para que la
+        // pantalla muestre lo mismo que va a aplicar la tira.
+        case LP_BPS:    s_lsPkt.bps        = constrain((int)s_lsPkt.bps        + dir,     1,  60); break;
+    }
+}
+
+static void ledStripLoop() {
+    unsigned long now = millis();
+
+    int dir = 0;
+    if      (buttons.isUpDown())   dir =  1;
+    else if (buttons.isDownDown()) dir = -1;
+
+    if (dir != 0) {
+        bool first = (dir != s_lsAdjDir);
+        if (first || (now - s_lsAdjStart >= LS_ADJ_DELAY_MS &&
+                      now - s_lsAdjRep   >= LS_ADJ_PERIOD_MS)) {
+            ledStripAdjust(dir);
+            ledStripSend(false);
+            drawLedStripState();
+            s_lsAdjRep = now;
+            if (first) { s_lsAdjDir = dir; s_lsAdjStart = now; }
+        }
+    } else {
+        s_lsAdjDir = 0;
+    }
+}
+
+void enterLedStrip() {
+    speaker.stop();
+    ledStrip.begin();
+
+    s_lsParam   = LP_EFFECT;
+    s_lsAdjDir  = 0;
+    s_lsSendMs  = 0;
+    drawLedStripState();
+    ledStripSend(true);    // estado inicial, para que la tira arranque igual
+    drawLedStripState();
+
+    itemLoopCallback = ledStripLoop;
+
+    ButtonActionCallbacks cbs;
+    // UP/DOWN se leen sostenidos en ledStripLoop
+    cbs.onLeft  = []() {
+        s_lsParam = (s_lsParam - 1 + LP_COUNT) % LP_COUNT;
+        drawLedStripState();
+    };
+    cbs.onRight = []() {
+        s_lsParam = (s_lsParam + 1) % LP_COUNT;
+        drawLedStripState();
+    };
+    cbs.onA     = []() {
+        s_lsPkt.effect = (s_lsPkt.effect + 1) % LED_FX_COUNT;
+        ledStripSend(true);
+        drawLedStripState();
+    };
+    cbs.onB     = []() {
+        // Apagado rapido: brillo 0 y de vuelta. El receptor no tiene comando
+        // de apagado, asi que apagar es poner el brillo a cero.
+        if (s_lsPkt.brightness > 0) {
+            s_lsBrightBackup   = s_lsPkt.brightness;
+            s_lsPkt.brightness = 0;
+        } else {
+            s_lsPkt.brightness = s_lsBrightBackup > 0 ? s_lsBrightBackup : 128;
+        }
+        ledStripSend(true);
+        drawLedStripState();
+    };
+    cbs.onOk    = []() { ledStripSend(true); drawLedStripState(); };
+    cbs.onMenu  = []() { ledStrip.end(); returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
 // BLUETOOTH - TECLADO WASD
 // =====================================================
 
@@ -1372,7 +1534,7 @@ void enterCamCar() {
 static uint8_t s_btKbMask      = 0;
 static bool    s_btKbConnected = false;
 
-static void btKeyboardLoop() {
+static void btWASDKeyboardLoop() {
     uint8_t keys[6];
     uint8_t n    = 0;
     uint8_t mask = 0;
@@ -1383,8 +1545,8 @@ static void btKeyboardLoop() {
     if (buttons.isDownDown())  { mask |= 0x04; if (n < 6) keys[n++] = HID_KEY_S;     }
     if (buttons.isRightDown()) { mask |= 0x08; if (n < 6) keys[n++] = HID_KEY_D;     }
     if (buttons.isBDown())     { mask |= 0x10; if (n < 6) keys[n++] = HID_KEY_ESC;   }
-    if (buttons.isOkDown())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_ENTER; }
-    if (buttons.isADown())     { mask |= 0x40; if (n < 6) keys[n++] = HID_KEY_SPACE; }
+    if (buttons.isOkDown())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_SPACE; }
+    if (buttons.isADown())     { mask |= 0x40; if (n < 6) keys[n++] = HID_KEY_ENTER; }
 
     // keyboardReport ya descarta envios identicos al anterior
     bt.keyboardReport(HID_MOD_NONE, keys, n);
@@ -1406,7 +1568,54 @@ void enterTecladoWasd() {
     s_btKbConnected = bt.isConnected();
     screen.drawBtKeyboard(bt.isActive(), s_btKbConnected, bt.getDeviceName(), 0);
 
-    itemLoopCallback = btKeyboardLoop;
+    itemLoopCallback = btWASDKeyboardLoop;
+
+    ButtonActionCallbacks cbs;
+    // Todas las teclas se leen por estado sostenido en btKeyboardLoop.
+    // MENU es el unico que no se envia: sale y apaga la radio.
+    cbs.onMenu = []() {
+        bt.keyReleaseAll();
+        bt.end();
+        returnToMenu();
+    };
+    buttons.setCallbacks(cbs);
+}
+
+static void btMinecraftKeyboardLoop() {
+    uint8_t keys[6];
+    uint8_t n    = 0;
+    uint8_t mask = 0;
+
+    // mask refleja siempre el estado fisico; el reporte HID solo admite 6
+    if (buttons.isUpDown())    { mask |= 0x01; if (n < 6) keys[n++] = HID_KEY_W;     }
+    if (buttons.isLeftDown())  { mask |= 0x02; if (n < 6) keys[n++] = HID_KEY_A;     }
+    if (buttons.isDownDown())  { mask |= 0x04; if (n < 6) keys[n++] = HID_KEY_S;     }
+    if (buttons.isRightDown()) { mask |= 0x08; if (n < 6) keys[n++] = HID_KEY_D;     }
+    if (buttons.isBDown())     { mask |= 0x10; if (n < 6) keys[n++] = HID_KEY_ESC;   }
+    if (buttons.isOkDown())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_SPACE; }
+    if (buttons.isADown())     { mask |= 0x40; if (n < 6) keys[n++] = HID_KEY_E; }
+
+    // keyboardReport ya descarta envios identicos al anterior
+    bt.keyboardReport(HID_MOD_NONE, keys, n);
+
+    // Redibujar solo cuando cambia algo: el SPI de la pantalla es lento
+    bool conn = bt.isConnected();
+    if (mask != s_btKbMask || conn != s_btKbConnected) {
+        s_btKbMask      = mask;
+        s_btKbConnected = conn;
+        screen.drawBtKeyboard(bt.isActive(), conn, bt.getDeviceName(), mask);
+    }
+}
+
+void enterTecladoMinecraft() {
+    speaker.stop();
+    bt.begin();   // BLE se enciende al entrar y se apaga al salir con [MENU]
+
+    s_btKbMask      = 0;
+    s_btKbConnected = bt.isConnected();
+    screen.drawBtKeyboard(bt.isActive(), s_btKbConnected, bt.getDeviceName(), 0);
+
+    itemLoopCallback = btMinecraftKeyboardLoop;
 
     ButtonActionCallbacks cbs;
     // Todas las teclas se leen por estado sostenido en btKeyboardLoop.

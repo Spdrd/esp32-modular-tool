@@ -1,54 +1,87 @@
 #pragma once
 #include <Arduino.h>
-#include "EspNowManager/EspNowManager.h"
 
+// =====================================================
+// Contrato binario con el receptor (tira WS2812B, ESP32-C3)
+// =====================================================
+//
+// El receptor DESCARTA cualquier paquete cuyo tamano no sea exactamente 6
+// bytes. Todos los campos son uint8_t, asi que no hay padding y el layout es
+// identico en cualquier compilador. No cambiar el orden.
+
+struct LedPacket {
+    uint8_t effect;      // byte 0: 0-5, fuera de rango el receptor lo ignora
+    uint8_t brightness;  // byte 1: 0-255
+    uint8_t r;           // byte 2: 0-255
+    uint8_t g;           // byte 3: 0-255
+    uint8_t b;           // byte 4: 0-255
+    uint8_t bps;         // byte 5: 1-60, el receptor lo recorta
+};
+
+static_assert(sizeof(LedPacket) == 6, "LedPacket debe medir exactamente 6 bytes");
+
+enum LedEffect : uint8_t {
+    LED_FX_SOLID    = 0,
+    LED_FX_RAINBOW  = 1,
+    LED_FX_CONFETTI = 2,
+    LED_FX_SINELON  = 3,
+    LED_FX_JUGGLE   = 4,
+    LED_FX_FIRE     = 5,
+    LED_FX_COUNT    = 6
+};
+
+const char* ledEffectName(uint8_t effect);
+
+// Canal del receptor. Emisor y receptor DEBEN coincidir o no llega nada,
+// aunque el send_cb reporte OK (el ACK es de radio, no de aplicacion).
+#define LEDSTRIP_CHANNEL 1
+
+// =====================================================
+// Manager
+// =====================================================
+//
+// Radio ESP-NOW de solo envio para la tira LED. A diferencia de
+// EspNowManager (Cam Car) no recibe nada, asi que no reserva buffer de video.
+//
+// IMPORTANTE: esp_now_init() es global. Este manager y EspNowManager no pueden
+// estar activos a la vez; cada herramienta hace begin() al entrar y end() al
+// salir, que es lo que los mantiene excluyentes.
 class EspNowLedManager {
 public:
-    EspNowLedManager(EspNowManager& mgr, const uint8_t* peerMac);
+    EspNowLedManager(const uint8_t mac[6], uint8_t channel = LEDSTRIP_CHANNEL);
 
-    void begin();
-    void end();
-    void send();
+    bool begin();   // enciende WiFi STA + ESP-NOW, fija canal y registra el peer
+    void end();     // apaga ESP-NOW y WiFi por completo
 
-    void fieldUp();
-    void fieldDown();
-    void fieldLeft();
-    void fieldRight();
+    bool isActive() const { return active; }
 
-    void nextEffect();
-    void prevEffect();
+    bool send(const LedPacket& pkt);
 
-    void toggle();
-    bool isOn()  const { return on; }
-    bool isReady() const { return ready; }
+    // Cambiar destino en caliente (dirigido o broadcast)
+    void setPeer(const uint8_t mac[6]);
+    const uint8_t* getPeer() const { return peerMac; }
+    bool isBroadcast() const;
 
-    int  getField()           const { return field; }
-    int  getBrightness()      const { return storedBrightness; }
-    int  getBps()             const { return bps; }
-    uint8_t getR()            const { return r; }
-    uint8_t getG()            const { return g; }
-    uint8_t getB()            const { return b; }
-    const char* getEffectName() const;
-    const char* getColorName() const;
+    // Resultado del ultimo envio (ACK de radio, no de aplicacion)
+    bool          lastSendOk() const { return sendOk; }
+    unsigned long lastSendMs() const { return lastMs; }
+    uint32_t      getSentCount() const { return sentCount; }
+    uint32_t      getFailCount() const { return failCount; }
 
-    static const int FIELD_COUNT = 3;
+    // Uso interno: lo llama el callback de radio desde el .cpp. Recibe un bool
+    // en vez de esp_now_send_status_t a proposito, para no arrastrar esp_now.h
+    // a todo lo que incluya este header.
+    void onSendResult(bool ok);
 
 private:
-    EspNowManager& mgr;
-    uint8_t mac[6];
-    int  effect;
-    int  storedBrightness;
-    int  bps;
-    uint8_t r, g, b;
-    int  colorIndex;
-    bool ready;
-    bool on;
-    int  field;
-    unsigned long lastSendMs;
+    uint8_t peerMac[6];
+    uint8_t channel;
+    bool    active;
 
-    static const uint8_t palette[][3];
-    static const char* colorNames[];
-    static const int COLOR_COUNT;
-    static const char* effectNames[];
-    static const int EFFECT_COUNT;
+    volatile bool     sendOk;
+    volatile uint32_t sentCount;
+    volatile uint32_t failCount;
+    unsigned long     lastMs;
+
+    bool registerPeer();
 };

@@ -14,6 +14,7 @@
 #include "SpeakerManager/SpeakerManager.h"
 #include "LinternaManager/LinternaManager.h"
 #include "EspNowManager/EspNowManager.h"
+#include "EspNowLedManager/EspNowLedManager.h"
 #include "BluetoothManager/BluetoothManager.h"
 #include "PongGame/PongGame.h"
 #include "BreakoutGame/BreakoutGame.h"
@@ -61,6 +62,13 @@
 // MAC del vehiculo ESP32-S3
 #define CAMCAR_MAC {0x80, 0xB5, 0x4E, 0xC6, 0xF9, 0x1C}
 
+// --- TIRA LED (ESP-NOW) ---
+// Broadcast por defecto: el receptor lo acepta y no hace falta conocer su MAC.
+// Para envio dirigido, pon aqui la MAC que el receptor imprime al arrancar
+// ("MAC de este receptor: ..."). Dirigido da ACK real de ese equipo; el ACK
+// de broadcast no confirma que alguien haya escuchado.
+#define LEDSTRIP_MAC {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
+
 // --- MENU STRUCTS ---
 struct MenuItem {
     const char* name;
@@ -88,6 +96,7 @@ extern MorseCode          morse;
 extern SpeakerManager     speaker;
 extern LinternaManager    linterna;
 extern EspNowManager      camCar;
+extern EspNowLedManager   ledStrip;
 extern BluetoothManager   bt;
 extern PongGame           pong;
 extern BreakoutGame       breakout;
@@ -138,7 +147,9 @@ void enterSynth();
 void enterLinterna();
 void enterSirena();
 void enterCamCar();
+void enterLedStrip();
 void enterTecladoWasd();
+void enterTecladoMinecraft();
 void enterMusicControl();
 void enterBtUnpair();
 void enterPong();

@@ -17,7 +17,7 @@ El menú tiene 6 secciones. `LEFT`/`RIGHT` cambian de sección, `UP`/`DOWN` camb
 | Juego | Descripción |
 |-------|-------------|
 | **Snake** | Serpiente clásica en rejilla 22x16 |
-| **Simon** | Secuencias de color y sonido |
+| **Simon** | Secuencias de color y sonido; el LED RGB repite el color de la pantalla |
 | **Tetris** | Rejilla 20x10 con pieza siguiente y hold |
 | **2048** | Rejilla 4x4 deslizante |
 | **Pong** | 1 jugador contra la IA |
@@ -52,13 +52,25 @@ Kids · Adults Are Talking · Outer Wilds · Riptide.
 La radio BLE se enciende al entrar al ítem y se apaga al salir con `MENU`, para no gastar
 batería. El dispositivo se anuncia como **ESP32 Tool** (HID genérico).
 
-- **Teclado WASD** — teclado BLE HID: `UP/LEFT/DOWN/RIGHT` → W/A/S/D, más ESC, ENTER y
-  SPACE. Las teclas se envían sostenidas (mantener = mantener pulsado en el host).
 - **Musica** — control multimedia (Consumer Control): `UP/DOWN` volumen con repetición al
   mantener, `LEFT/RIGHT` pista anterior/siguiente, `OK` play/pausa.
-- **Olvidar vinculos** — borra los emparejamientos guardados. Necesario cuando cambia el
-  descriptor HID: el host cachea los servicios y no los relee, así que hay que romper el
-  vínculo por ambos lados.
+- **Teclado WASD** — teclado BLE HID. Las teclas se envían sostenidas (mantener el botón =
+  mantener pulsada la tecla en el host).
+- **Teclado Minecraft** — igual que el anterior, pero `A` envía `E` (inventario).
+
+| Botón | Teclado WASD | Teclado Minecraft |
+|-------|--------------|-------------------|
+| UP    | W            | W                 |
+| LEFT  | A            | A                 |
+| DOWN  | S            | S                 |
+| RIGHT | D            | D                 |
+| B     | ESC          | ESC               |
+| OK    | SPACE        | SPACE             |
+| A     | ENTER        | E                 |
+
+`enterBtUnpair()` (borrar emparejamientos guardados) sigue implementada pero ahora mismo no
+está enlazada en el menú. Es útil cuando cambia el descriptor HID: el host cachea los
+servicios y no los relee, así que hay que romper el vínculo por ambos lados.
 
 ## Hardware
 

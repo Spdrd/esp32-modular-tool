@@ -1360,6 +1360,118 @@ void ScreenManager::drawBtKeyboard(bool active, bool connected,
 }
 
 // =====================================================
+// DRAW LED STRIP
+// =====================================================
+
+// Fila de parametro: nombre, barra proporcional y valor numerico.
+static void ledParamRow(Adafruit_GC9A01A& tft, int y, const char* name,
+                        int value, int maxValue, uint16_t barColor,
+                        bool selected, const char* textValue) {
+    const int BAR_X = 92, BAR_W = 76, BAR_H = 7;
+
+    if (selected) {
+        tft.fillRoundRect(14, y - 3, 212, 17, 3, 0x18E3);
+        tft.drawRoundRect(14, y - 3, 212, 17, 3, GC9A01A_WHITE);
+    }
+
+    tft.setTextSize(1);
+    tft.setTextColor(selected ? GC9A01A_WHITE : 0x8410);
+    tft.setCursor(22, y + 1);
+    tft.print(name);
+
+    if (textValue) {
+        // Fila de efecto: se muestra el nombre en vez de una barra
+        tft.setTextColor(selected ? GC9A01A_YELLOW : GC9A01A_LIGHTGREY);
+        tft.setCursor(BAR_X, y + 1);
+        tft.print(textValue);
+        return;
+    }
+
+    tft.drawRect(BAR_X, y, BAR_W, BAR_H, 0x4A49);
+    int filled = (maxValue > 0) ? (value * (BAR_W - 2)) / maxValue : 0;
+    if (filled > 0) tft.fillRect(BAR_X + 1, y + 1, filled, BAR_H - 2, barColor);
+
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%d", value);
+    tft.setTextColor(selected ? GC9A01A_WHITE : GC9A01A_LIGHTGREY);
+    tft.setCursor(BAR_X + BAR_W + 8, y + 1);
+    tft.print(buf);
+}
+
+void ScreenManager::drawLedStrip(int param, uint8_t effect, const char* effectName,
+                                  uint8_t brightness, uint8_t r, uint8_t g, uint8_t b,
+                                  uint8_t bps, bool active, bool lastOk, bool broadcast,
+                                  uint32_t sent, uint32_t failed) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t bx, by; uint16_t bw, bh;
+
+    // Titulo
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_CYAN);
+    const char* title = "TIRA LED";
+    tft.getTextBounds(title, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 12);
+    tft.print(title);
+
+    // Muestra del color activo, con el brillo aplicado para que se parezca
+    // a lo que realmente se vera en la tira
+    uint16_t swatch = tft.color565((r * brightness) / 255,
+                                   (g * brightness) / 255,
+                                   (b * brightness) / 255);
+    tft.fillRoundRect(85, 26, 70, 20, 4, swatch);
+    tft.drawRoundRect(85, 26, 70, 20, 4, 0x632C);
+
+    // Filas de parametros
+    const int Y0 = 56, STEP = 18;
+    ledParamRow(tft, Y0 + 0 * STEP, "EFECTO", effect, LED_FX_COUNT - 1,
+                GC9A01A_MAGENTA, param == 0, effectName);
+    ledParamRow(tft, Y0 + 1 * STEP, "BRILLO", brightness, 255,
+                GC9A01A_WHITE, param == 1, nullptr);
+    ledParamRow(tft, Y0 + 2 * STEP, "ROJO", r, 255,
+                GC9A01A_RED, param == 2, nullptr);
+    ledParamRow(tft, Y0 + 3 * STEP, "VERDE", g, 255,
+                GC9A01A_GREEN, param == 3, nullptr);
+    ledParamRow(tft, Y0 + 4 * STEP, "AZUL", b, 255,
+                GC9A01A_BLUE, param == 4, nullptr);
+    ledParamRow(tft, Y0 + 5 * STEP, "VELOC", bps, 60,
+                GC9A01A_ORANGE, param == 5, nullptr);
+
+    // Estado del enlace. El ACK es de radio: confirma que alguien lo recibio,
+    // no que la tira lo haya aplicado.
+    tft.setTextSize(1);
+    char status[36];
+    if (!active) {
+        tft.setTextColor(GC9A01A_DARKGREY);
+        snprintf(status, sizeof(status), "RADIO APAGADA");
+    } else if (sent == 0 && failed == 0) {
+        tft.setTextColor(GC9A01A_YELLOW);
+        snprintf(status, sizeof(status), "%s  sin enviar",
+                 broadcast ? "BCAST" : "DIRECTO");
+    } else {
+        tft.setTextColor(lastOk ? GC9A01A_GREEN : GC9A01A_RED);
+        snprintf(status, sizeof(status), "%s  ok:%u fallo:%u",
+                 broadcast ? "BCAST" : "DIRECTO",
+                 (unsigned)sent, (unsigned)failed);
+    }
+    tft.getTextBounds(status, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 172);
+    tft.print(status);
+
+    // Ayuda
+    tft.setTextColor(0x39C7);
+    const char* h1 = "<> param   ^v valor";
+    tft.getTextBounds(h1, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 192);
+    tft.print(h1);
+
+    const char* h2 = "[A]efecto [B]negro [OK]envia";
+    tft.getTextBounds(h2, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 206);
+    tft.print(h2);
+}
+
+// =====================================================
 // DRAW MUSIC CONTROL
 // =====================================================
 

@@ -4,6 +4,7 @@
 #include <Adafruit_GC9A01A.h>
 #include <TJpg_Decoder.h>
 #include "../DoomGame/DoomGame.h"
+#include "../EspNowLedManager/EspNowLedManager.h"
 
 struct ScreenPinConfig
 {
@@ -99,6 +100,13 @@ public:
     // comando enviado ("" si no hay ninguno reciente).
     void drawMusicControl(bool active, bool connected, const char* deviceName,
                           bool playing, const char* lastAction);
+
+    // Tira LED por ESP-NOW. param = fila seleccionada (0..5):
+    // 0 efecto, 1 brillo, 2 rojo, 3 verde, 4 azul, 5 velocidad.
+    void drawLedStrip(int param, uint8_t effect, const char* effectName,
+                      uint8_t brightness, uint8_t r, uint8_t g, uint8_t b,
+                      uint8_t bps, bool active, bool lastOk, bool broadcast,
+                      uint32_t sent, uint32_t failed);
 
     // ---- Nuevos juegos ----
     void drawPong(int ballX, int ballY, int playerY, int aiY,
