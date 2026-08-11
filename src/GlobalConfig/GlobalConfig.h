@@ -65,7 +65,10 @@
 // entrada, asi que no hay riesgo de excitarlos por error.
 #define JOY_X_PIN   34
 #define JOY_Y_PIN   35
-#define JOY_INVERT_X false
+// Boton integrado del stick. Va en el 33 y no en otro ADC1 porque el switch
+// cierra a masa y necesita pull-up interno, que los GPIO 34-39 no tienen.
+#define JOY_SW_PIN  33
+#define JOY_INVERT_X true
 #define JOY_INVERT_Y false
 
 // --- CAM CAR (ESP-NOW) ---
@@ -115,6 +118,22 @@ extern FlappyGame         flappy;
 extern InvadersGame       invaders;
 extern MinesweeperGame    minesweeper;
 extern DoomGame           doom;
+
+// --- ENTRADA COMBINADA (cruceta + stick) ---
+// El espejo del joystick solo reproduce callbacks de flanco. Todo lo que lea
+// estado sostenido (juegos, secuenciadores, Cam Car...) debe usar estos
+// helpers, o el stick quedaria muerto en esas pantallas.
+inline bool inputUp()    { return buttons.isUpDown()    || joystick.isUpDown();    }
+inline bool inputDown()  { return buttons.isDownDown()  || joystick.isDownDown();  }
+inline bool inputLeft()  { return buttons.isLeftDown()  || joystick.isLeftDown();  }
+inline bool inputRight() { return buttons.isRightDown() || joystick.isRightDown(); }
+
+// OK sostenido NO incluye el boton del stick a proposito: alli la duracion de
+// la pulsacion es lo que elige el gesto (OK/A/B/MENU), asi que mantenerlo para
+// lanzar A tambien contaria como OK pulsado un segundo entero. En Morse eso
+// seria una raya y en los teclados BT un SPACE continuo.
+// El boton del stick actua por callbacks; para el OK sostenido esta el fisico.
+inline bool inputOk()    { return buttons.isOkDown(); }
 
 // --- MENU STATE ---
 extern int currentSection;

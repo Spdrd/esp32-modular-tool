@@ -5,6 +5,7 @@
 struct JoystickPinConfig {
     int  xPin;
     int  yPin;
+    int  swPin;      // boton integrado del stick, activo en bajo
     bool invertX;
     bool invertY;
 };
@@ -16,6 +17,25 @@ enum JoyDirection : uint8_t {
     JOY_LEFT,
     JOY_RIGHT
 };
+
+// El stick solo tiene un boton, pero las herramientas usan OK, A, B y MENU.
+// Se distinguen por cuanto se mantiene pulsado. La clasificacion ocurre AL
+// SOLTAR: si se disparasen al cruzar cada umbral, mantener hasta MENU habria
+// lanzado antes A y B por el camino.
+enum JoyGesture : uint8_t {
+    JOY_GESTURE_NONE = 0,
+    JOY_GESTURE_OK,     // click corto
+    JOY_GESTURE_A,      // mantener medio
+    JOY_GESTURE_B,      // mantener largo
+    JOY_GESTURE_MENU    // mantener muy largo
+};
+
+const char* joyGestureName(JoyGesture g);
+
+// Umbrales en ms, medidos desde que se pulsa
+#define JOY_GESTURE_A_MS     400
+#define JOY_GESTURE_B_MS    1000
+#define JOY_GESTURE_MENU_MS 1700
 
 // Joystick analogico de dos potenciometros (0-3.3V por eje).
 //
@@ -63,6 +83,14 @@ public:
     // Direccion dominante (un solo eje). JOY_NONE si esta centrado.
     JoyDirection getDirection() const { return dominant; }
 
+    // Boton integrado del stick. Distinguible del de la placa:
+    // buttons.isOkDown() es el fisico, joystick.isButtonDown() es el del stick.
+    bool isButtonDown() const { return swHeld; }
+
+    // Gesto que se disparara si se suelta ahora mismo. Sirve para dar
+    // feedback en pantalla mientras se mantiene pulsado.
+    JoyGesture getPendingGesture() const { return pendingGesture; }
+
     // --- Callbacks ---
     // Espeja los de ButtonManager: el stick dispara las mismas acciones de
     // direccion que la cruceta sin duplicar la configuracion de cada tool.
@@ -82,6 +110,12 @@ private:
     JoyDirection dominant;
     JoyDirection lastFired;
 
+    bool          swHeld;
+    bool          swLastRead;
+    unsigned long swDebounceMs;
+    unsigned long swPressMs;
+    JoyGesture    pendingGesture;
+
     unsigned long repeatStartMs;
     unsigned long repeatLastMs;
 
@@ -91,4 +125,8 @@ private:
     int   sampleAxis(int pin) const;
     float normalize(int raw, int center, bool invert) const;
     void  fire(JoyDirection dir);
+    void  updateButton();
+    void  fireGesture(JoyGesture g);
+    JoyGesture classifyHold(unsigned long heldMs) const;
+    ButtonActionCallbacks activeCallbacks() const;
 };

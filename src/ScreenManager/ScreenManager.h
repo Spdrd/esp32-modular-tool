@@ -104,7 +104,8 @@ public:
     // Estado del joystick: posicion analogica + direcciones discretas activas.
     void drawJoystick(int rawX, int rawY, int centerX, int centerY,
                       float x, float y, float magnitude, float angle,
-                      bool up, bool down, bool left, bool right);
+                      bool up, bool down, bool left, bool right, bool button,
+                      const char* pendingGesture);
 
     // Tira LED por ESP-NOW. param = fila seleccionada (0..5):
     // 0 efecto, 1 brillo, 2 rojo, 3 verde, 4 azul, 5 velocidad.

@@ -20,12 +20,17 @@ static const float EMA_ALPHA = 0.35f;
 
 static const int SAMPLES_PER_UPDATE = 4;
 
+// Antirrebote del boton del stick, mismo criterio que ButtonManager
+static const unsigned long SW_DEBOUNCE_MS = 50;
+
 JoystickManager::JoystickManager(JoystickPinConfig config)
     : config(config),
       rawX(0), rawY(0), centerX(2048), centerY(2048),
       normX(0), normY(0), emaX(0), emaY(0), emaReady(false),
       heldUp(false), heldDown(false), heldLeft(false), heldRight(false),
       dominant(JOY_NONE), lastFired(JOY_NONE),
+      swHeld(false), swLastRead(false), swDebounceMs(0), swPressMs(0),
+      pendingGesture(JOY_GESTURE_NONE),
       repeatStartMs(0), repeatLastMs(0),
       mirrored(nullptr) {}
 
@@ -38,6 +43,10 @@ void JoystickManager::begin() {
     // Los GPIO 34-39 son solo de entrada y no admiten pinMode con pull.
     pinMode(config.xPin, INPUT);
     pinMode(config.yPin, INPUT);
+
+    // El switch del stick cierra a masa: necesita pull-up. El GPIO 33 si lo
+    // tiene (los 34-39 no), por eso el boton va ahi y no en otro ADC1.
+    pinMode(config.swPin, INPUT_PULLUP);
 
     delay(10);
     calibrateCenter();
@@ -109,10 +118,14 @@ void JoystickManager::setCallbacks(ButtonActionCallbacks callbacks) {
     own = callbacks;
 }
 
+// Los callbacks espejados ganan: son los que la herramienta activa acaba de
+// configurar en ButtonManager.
+ButtonActionCallbacks JoystickManager::activeCallbacks() const {
+    return mirrored ? mirrored->getCallbacks() : own;
+}
+
 void JoystickManager::fire(JoyDirection dir) {
-    // Los callbacks espejados ganan: son los que la herramienta activa acaba
-    // de configurar en ButtonManager.
-    ButtonActionCallbacks cbs = mirrored ? mirrored->getCallbacks() : own;
+    ButtonActionCallbacks cbs = activeCallbacks();
 
     switch (dir) {
         case JOY_UP:    Serial.println("[JOY] UP");    if (cbs.onUp)    cbs.onUp();    break;
@@ -123,7 +136,67 @@ void JoystickManager::fire(JoyDirection dir) {
     }
 }
 
+const char* joyGestureName(JoyGesture g) {
+    switch (g) {
+        case JOY_GESTURE_OK:   return "OK";
+        case JOY_GESTURE_A:    return "A";
+        case JOY_GESTURE_B:    return "B";
+        case JOY_GESTURE_MENU: return "MENU";
+        default:               return "--";
+    }
+}
+
+JoyGesture JoystickManager::classifyHold(unsigned long heldMs) const {
+    if (heldMs >= JOY_GESTURE_MENU_MS) return JOY_GESTURE_MENU;
+    if (heldMs >= JOY_GESTURE_B_MS)    return JOY_GESTURE_B;
+    if (heldMs >= JOY_GESTURE_A_MS)    return JOY_GESTURE_A;
+    return JOY_GESTURE_OK;
+}
+
+void JoystickManager::fireGesture(JoyGesture g) {
+    ButtonActionCallbacks cbs = activeCallbacks();
+    switch (g) {
+        case JOY_GESTURE_OK:   Serial.println("[JOY] OK");   if (cbs.onOk)   cbs.onOk();   break;
+        case JOY_GESTURE_A:    Serial.println("[JOY] A");    if (cbs.onA)    cbs.onA();    break;
+        case JOY_GESTURE_B:    Serial.println("[JOY] B");    if (cbs.onB)    cbs.onB();    break;
+        case JOY_GESTURE_MENU: Serial.println("[JOY] MENU"); if (cbs.onMenu) cbs.onMenu(); break;
+        default: break;
+    }
+}
+
+// Antirrebote por flanco. El gesto se resuelve al soltar, clasificado por
+// cuanto duro la pulsacion; asi no hay repeticion ni disparos en cascada.
+void JoystickManager::updateButton() {
+    bool reading = (digitalRead(config.swPin) == LOW);
+    unsigned long now = millis();
+
+    if (reading != swLastRead) {
+        swDebounceMs = now;
+        swLastRead   = reading;
+    }
+
+    if (now - swDebounceMs > SW_DEBOUNCE_MS && reading != swHeld) {
+        swHeld = reading;
+        if (swHeld) {
+            swPressMs = now;
+        } else {
+            // fireGesture puede cambiar los callbacks (MENU sale de la
+            // herramienta), asi que el estado se deja limpio antes.
+            JoyGesture g = classifyHold(now - swPressMs);
+            pendingGesture = JOY_GESTURE_NONE;
+            fireGesture(g);
+            return;
+        }
+    }
+
+    pendingGesture = swHeld ? classifyHold(now - swPressMs) : JOY_GESTURE_NONE;
+}
+
 void JoystickManager::update() {
+    // Antes que nada: mas abajo hay un return temprano cuando el stick esta
+    // centrado, y el boton tiene que responder tambien en reposo.
+    updateButton();
+
     rawX = sampleAxis(config.xPin);
     rawY = sampleAxis(config.yPin);
 

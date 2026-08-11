@@ -1365,7 +1365,8 @@ void ScreenManager::drawBtKeyboard(bool active, bool connected,
 
 void ScreenManager::drawJoystick(int rawX, int rawY, int centerX, int centerY,
                                   float x, float y, float magnitude, float angle,
-                                  bool up, bool down, bool left, bool right) {
+                                  bool up, bool down, bool left, bool right,
+                                  bool button, const char* pendingGesture) {
     tft.fillScreen(GC9A01A_BLACK);
 
     int16_t bx, by; uint16_t bw, bh;
@@ -1391,7 +1392,25 @@ void ScreenManager::drawJoystick(int rawX, int rawY, int centerX, int centerY,
     int px = CX + (int)(x * R);
     int py = CY - (int)(y * R);
     tft.drawLine(CX, CY, px, py, 0x632C);
-    tft.fillCircle(px, py, 6, magnitude > 0.0f ? GC9A01A_GREEN : GC9A01A_DARKGREY);
+
+    // El boton se pulsa hundiendo el propio stick, asi que se representa
+    // sobre la perilla: amarilla y con halo cuando esta pulsado.
+    if (button) {
+        tft.fillCircle(px, py, 9, GC9A01A_YELLOW);
+        tft.drawCircle(px, py, 12, GC9A01A_YELLOW);
+    } else {
+        tft.fillCircle(px, py, 6, magnitude > 0.0f ? GC9A01A_GREEN : GC9A01A_DARKGREY);
+    }
+
+    // Gesto que se lanzaria al soltar: sin esto mantener pulsado es adivinar
+    if (button && pendingGesture) {
+        tft.setTextSize(2);
+        tft.setTextColor(GC9A01A_YELLOW);
+        tft.getTextBounds(pendingGesture, 0, 0, &bx, &by, &bw, &bh);
+        tft.fillRect(120 - bw / 2 - 6, 24, bw + 12, bh + 8, GC9A01A_BLACK);
+        tft.setCursor(120 - bw / 2, 28);
+        tft.print(pendingGesture);
+    }
 
     // --- Direcciones discretas activas ---
     uint16_t on = GC9A01A_GREEN, off = 0x2124;
@@ -1414,13 +1433,14 @@ void ScreenManager::drawJoystick(int rawX, int rawY, int centerX, int centerY,
     tft.setCursor((240 - bw) / 2, 191);
     tft.print(buf);
 
-    snprintf(buf, sizeof(buf), "mag %.2f  ang %3.0f", magnitude, angle);
+    snprintf(buf, sizeof(buf), "mag %.2f  ang %3.0f   SW %s",
+             magnitude, angle, button ? "ON" : "--");
     tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
     tft.setCursor((240 - bw) / 2, 204);
     tft.print(buf);
 
     tft.setTextColor(0x39C7);
-    const char* hint = "[OK] recalibrar centro";
+    const char* hint = "[B] recalibra centro";
     tft.getTextBounds(hint, 0, 0, &bx, &by, &bw, &bh);
     tft.setCursor((240 - bw) / 2, 218);
     tft.print(hint);

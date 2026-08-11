@@ -27,6 +27,7 @@ ButtonPinConfig buttonConfig = {
 static JoystickPinConfig joystickConfig = {
     .xPin    = JOY_X_PIN,
     .yPin    = JOY_Y_PIN,
+    .swPin   = JOY_SW_PIN,
     .invertX = JOY_INVERT_X,
     .invertY = JOY_INVERT_Y
 };
@@ -126,11 +127,11 @@ static const MenuItem bluetoothItems[] = {
 
 static const MenuSection menuSections[] = {
     {"Info",       infoItems,      2},
-    {"Juegos",     gamesItems,    10},
-    {"Herramientas",toolsItems,    9},
-    {"Musica",     musicItems,     8},
-    {"Mis Dispositivos", devicesItems, 2},
     {"Bluetooth",  bluetoothItems, 3},
+    {"Mis Dispositivos", devicesItems, 2},
+    {"Herramientas",toolsItems,    9},
+    {"Juegos",     gamesItems,    10},
+    {"Musica",     musicItems,     8}
 };
 
 const MenuSection* sections = menuSections;
@@ -339,7 +340,7 @@ static void tetrisLoop() {
     unsigned long now = millis();
 
     // Soft drop continuo mientras down está pulsado
-    if (buttons.isDownDown() && now - s_tetDropRepeat >= TET_DROP_PERIOD) {
+    if (inputDown() && now - s_tetDropRepeat >= TET_DROP_PERIOD) {
         tetris.softDrop();
         s_tetDropRepeat = now;
         redraw = true;
@@ -347,8 +348,8 @@ static void tetrisLoop() {
 
     // DAS lateral
     int dir = 0;
-    if      (buttons.isLeftDown())  dir = -1;
-    else if (buttons.isRightDown()) dir =  1;
+    if      (inputLeft())  dir = -1;
+    else if (inputRight()) dir =  1;
 
     if (dir != 0) {
         if (dir != s_tetDasDir) {
@@ -455,7 +456,7 @@ static void drawMorseState() {
 static void morseLoop() {
     speaker.update();
 
-    bool okDown = buttons.isOkDown();
+    bool okDown = inputOk();
     unsigned long now = millis();
 
     if (okDown && !s_okWasDown) {
@@ -552,7 +553,7 @@ static void seqPlayStepTone(int i) {
 static void synthLoop() {
     // --- Modo TOCAR: mantener OK para sonar (solo si el bucle no manda) ---
     if (s_synthMode == 0 && !s_seqPlaying) {
-        bool okDown = buttons.isOkDown();
+        bool okDown = inputOk();
         if (okDown && !s_synthOkWas) {
             synthStartNote();
             drawSynthState();
@@ -745,8 +746,8 @@ static void drawPongState() {
 
 static void pongLoop() {
     bool moved = false;
-    if (buttons.isUpDown())   { pong.moveUp();   moved = true; }
-    if (buttons.isDownDown()) { pong.moveDown(); moved = true; }
+    if (inputUp())   { pong.moveUp();   moved = true; }
+    if (inputDown()) { pong.moveDown(); moved = true; }
     bool updated = pong.update();
     if (updated || moved) drawPongState();
 }
@@ -778,8 +779,8 @@ static void drawBreakoutState() {
 
 static void breakoutLoop() {
     bool moved = false;
-    if (buttons.isLeftDown())  { breakout.moveLeft();  moved = true; }
-    if (buttons.isRightDown()) { breakout.moveRight(); moved = true; }
+    if (inputLeft())  { breakout.moveLeft();  moved = true; }
+    if (inputRight()) { breakout.moveRight(); moved = true; }
     bool updated = breakout.update();
     if (updated || moved) drawBreakoutState();
 }
@@ -850,8 +851,8 @@ static void invadersLoop() {
     bool moved = false;
     unsigned long now = millis();
     if (now - s_invMoveMs >= 80) {
-        if (buttons.isLeftDown())  { invaders.moveLeft();  moved = true; s_invMoveMs = now; }
-        if (buttons.isRightDown()) { invaders.moveRight(); moved = true; s_invMoveMs = now; }
+        if (inputLeft())  { invaders.moveLeft();  moved = true; s_invMoveMs = now; }
+        if (inputRight()) { invaders.moveRight(); moved = true; s_invMoveMs = now; }
     }
     bool updated = invaders.update();
     if (updated || moved) drawInvadersState();
@@ -902,10 +903,10 @@ static void minesweeperLoop() {
     if (minesweeper.getState() != MinesweeperGame::PLAYING) return;
 
     int dx = 0, dy = 0;
-    if      (buttons.isLeftDown())  dx = -1;
-    else if (buttons.isRightDown()) dx =  1;
-    else if (buttons.isUpDown())    dy = -1;
-    else if (buttons.isDownDown())  dy =  1;
+    if      (inputLeft())  dx = -1;
+    else if (inputRight()) dx =  1;
+    else if (inputUp())    dy = -1;
+    else if (inputDown())  dy =  1;
 
     unsigned long now = millis();
 
@@ -968,10 +969,10 @@ static void doomLoop() {
 
     // Held-button movement (continuo)
     bool moved = false;
-    if (buttons.isUpDown())    { doom.moveForward();  moved = true; }
-    if (buttons.isDownDown())  { doom.moveBackward(); moved = true; }
-    if (buttons.isLeftDown())  { doom.turnLeft();     moved = true; }
-    if (buttons.isRightDown()) { doom.turnRight();    moved = true; }
+    if (inputUp())    { doom.moveForward();  moved = true; }
+    if (inputDown())  { doom.moveBackward(); moved = true; }
+    if (inputLeft())  { doom.turnLeft();     moved = true; }
+    if (inputRight()) { doom.turnRight();    moved = true; }
 
     if (redraw || moved) drawDoomState();
 }
@@ -1320,10 +1321,10 @@ static void drawCamCarStatusState() {
 
 // Lee direccion mantenida (sin pasar por callbacks de flanco)
 static CommandType camCarReadCommand() {
-    if (buttons.isUpDown())    return CMD_FORWARD;
-    if (buttons.isDownDown())  return CMD_BACKWARD;
-    if (buttons.isLeftDown())  return CMD_LEFT;
-    if (buttons.isRightDown()) return CMD_RIGHT;
+    if (inputUp())    return CMD_FORWARD;
+    if (inputDown())  return CMD_BACKWARD;
+    if (inputLeft())  return CMD_LEFT;
+    if (inputRight()) return CMD_RIGHT;
     return CMD_STOP;
 }
 
@@ -1414,7 +1415,9 @@ static void drawJoystickState() {
                         joystick.getX(), joystick.getY(),
                         joystick.getMagnitude(), joystick.getAngleDeg(),
                         joystick.isUpDown(), joystick.isDownDown(),
-                        joystick.isLeftDown(), joystick.isRightDown());
+                        joystick.isLeftDown(), joystick.isRightDown(),
+                        joystick.isButtonDown(),
+                        joyGestureName(joystick.getPendingGesture()));
 }
 
 static void joystickTestLoop() {
@@ -1433,9 +1436,13 @@ void enterTestJoystick() {
     itemLoopCallback = joystickTestLoop;
 
     ButtonActionCallbacks cbs;
-    // Sin callbacks de direccion: aqui interesa ver el stick crudo, no que
-    // navegue. OK recalibra con el stick suelto.
-    cbs.onOk   = []() {
+    // Sin callbacks de direccion: aqui interesa ver el stick crudo, no navegar.
+    // Recalibrar va en B y no en OK para que sea deliberado: un click corto
+    // accidental dejaria el centro mal medido.
+    cbs.onB    = []() {
+        // El gesto se resuelve al soltar, pero la perilla tarda en volver al
+        // centro. Sin esta espera se calibraria sobre un stick aun desviado.
+        delay(250);
         joystick.calibrateCenter();
         Serial.println("[JOY] centro recalibrado");
         drawJoystickState();
@@ -1508,8 +1515,8 @@ static void ledStripLoop() {
     unsigned long now = millis();
 
     int dir = 0;
-    if      (buttons.isUpDown())   dir =  1;
-    else if (buttons.isDownDown()) dir = -1;
+    if      (inputUp())   dir =  1;
+    else if (inputDown()) dir = -1;
 
     if (dir != 0) {
         bool first = (dir != s_lsAdjDir);
@@ -1589,12 +1596,12 @@ static void btWASDKeyboardLoop() {
     uint8_t mask = 0;
 
     // mask refleja siempre el estado fisico; el reporte HID solo admite 6
-    if (buttons.isUpDown())    { mask |= 0x01; if (n < 6) keys[n++] = HID_KEY_W;     }
-    if (buttons.isLeftDown())  { mask |= 0x02; if (n < 6) keys[n++] = HID_KEY_A;     }
-    if (buttons.isDownDown())  { mask |= 0x04; if (n < 6) keys[n++] = HID_KEY_S;     }
-    if (buttons.isRightDown()) { mask |= 0x08; if (n < 6) keys[n++] = HID_KEY_D;     }
+    if (inputUp())    { mask |= 0x01; if (n < 6) keys[n++] = HID_KEY_W;     }
+    if (inputLeft())  { mask |= 0x02; if (n < 6) keys[n++] = HID_KEY_A;     }
+    if (inputDown())  { mask |= 0x04; if (n < 6) keys[n++] = HID_KEY_S;     }
+    if (inputRight()) { mask |= 0x08; if (n < 6) keys[n++] = HID_KEY_D;     }
     if (buttons.isBDown())     { mask |= 0x10; if (n < 6) keys[n++] = HID_KEY_ESC;   }
-    if (buttons.isOkDown())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_SPACE; }
+    if (inputOk())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_SPACE; }
     if (buttons.isADown())     { mask |= 0x40; if (n < 6) keys[n++] = HID_KEY_ENTER; }
 
     // keyboardReport ya descarta envios identicos al anterior
@@ -1636,12 +1643,12 @@ static void btMinecraftKeyboardLoop() {
     uint8_t mask = 0;
 
     // mask refleja siempre el estado fisico; el reporte HID solo admite 6
-    if (buttons.isUpDown())    { mask |= 0x01; if (n < 6) keys[n++] = HID_KEY_W;     }
-    if (buttons.isLeftDown())  { mask |= 0x02; if (n < 6) keys[n++] = HID_KEY_A;     }
-    if (buttons.isDownDown())  { mask |= 0x04; if (n < 6) keys[n++] = HID_KEY_S;     }
-    if (buttons.isRightDown()) { mask |= 0x08; if (n < 6) keys[n++] = HID_KEY_D;     }
+    if (inputUp())    { mask |= 0x01; if (n < 6) keys[n++] = HID_KEY_W;     }
+    if (inputLeft())  { mask |= 0x02; if (n < 6) keys[n++] = HID_KEY_A;     }
+    if (inputDown())  { mask |= 0x04; if (n < 6) keys[n++] = HID_KEY_S;     }
+    if (inputRight()) { mask |= 0x08; if (n < 6) keys[n++] = HID_KEY_D;     }
     if (buttons.isBDown())     { mask |= 0x10; if (n < 6) keys[n++] = HID_KEY_ESC;   }
-    if (buttons.isOkDown())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_SPACE; }
+    if (inputOk())    { mask |= 0x20; if (n < 6) keys[n++] = HID_KEY_SPACE; }
     if (buttons.isADown())     { mask |= 0x40; if (n < 6) keys[n++] = HID_KEY_E; }
 
     // keyboardReport ya descarta envios identicos al anterior
@@ -1715,8 +1722,8 @@ static void btMusicLoop() {
 
     // Volumen: primera pulsacion inmediata, luego repeticion al mantener
     int dir = 0;
-    if      (buttons.isUpDown())   dir =  1;
-    else if (buttons.isDownDown()) dir = -1;
+    if      (inputUp())   dir =  1;
+    else if (inputDown()) dir = -1;
 
     if (dir != 0) {
         bool firstPress = (dir != s_mcVolDir);
@@ -1765,7 +1772,7 @@ void enterMusicControl() {
     // UP/DOWN se leen sostenidos en btMusicLoop para poder repetir volumen
     cbs.onLeft  = []() { bt.consumerTap(HID_CC_PREV); mcFlash("<< PREV"); drawBtMusicState(); };
     cbs.onRight = []() { bt.consumerTap(HID_CC_NEXT); mcFlash("NEXT >>"); drawBtMusicState(); };
-    cbs.onOk    = []() {
+    cbs.onA    = []() {
         bt.consumerTap(HID_CC_PLAY_PAUSE);
         s_mcPlaying = !s_mcPlaying;
         mcFlash(s_mcPlaying ? "PLAY" : "PAUSA");
@@ -1837,15 +1844,17 @@ void itemLoopUpdate() {
 // CALLBACKS - MODO MENU
 // =====================================================
 
+// Derecha avanza en el array y izquierda retrocede, para que el recorrido siga
+// el orden en que estan declaradas las secciones en menuSections[].
 static void onMenuLeft()   {
-    currentSection = (currentSection + 1) % sectionCount;
+    currentSection = (currentSection - 1 + sectionCount) % sectionCount;
     currentItem = 0;
     Serial.print("[MENU] seccion: "); Serial.println(sections[currentSection].title);
     renderMenu();
 }
 
 static void onMenuRight()  {
-    currentSection = (currentSection - 1 + sectionCount) % sectionCount;
+    currentSection = (currentSection + 1) % sectionCount;
     currentItem = 0;
     Serial.print("[MENU] seccion: "); Serial.println(sections[currentSection].title);
     renderMenu();
