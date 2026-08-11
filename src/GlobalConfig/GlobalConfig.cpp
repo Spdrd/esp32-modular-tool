@@ -24,7 +24,15 @@ ButtonPinConfig buttonConfig = {
     .bOkPin     = BTN_OK
 };
 
+static JoystickPinConfig joystickConfig = {
+    .xPin    = JOY_X_PIN,
+    .yPin    = JOY_Y_PIN,
+    .invertX = JOY_INVERT_X,
+    .invertY = JOY_INVERT_Y
+};
+
 ButtonManager buttons(buttonConfig);
+JoystickManager joystick(joystickConfig);
 ScreenManager screen(screenPins);
 SnakeGame snake;
 CronoManager crono;
@@ -91,6 +99,7 @@ static const MenuItem toolsItems[] = {
     {"Synth",       enterSynth},
     {"Linterna",    enterLinterna},
     {"Sirena",      enterSirena},
+    {"Joystick",    enterTestJoystick},
 };
 
 static const MenuItem musicItems[] = {
@@ -118,7 +127,7 @@ static const MenuItem bluetoothItems[] = {
 static const MenuSection menuSections[] = {
     {"Info",       infoItems,      2},
     {"Juegos",     gamesItems,    10},
-    {"Herramientas",toolsItems,    8},
+    {"Herramientas",toolsItems,    9},
     {"Musica",     musicItems,     8},
     {"Mis Dispositivos", devicesItems, 2},
     {"Bluetooth",  bluetoothItems, 3},
@@ -1392,6 +1401,46 @@ void enterCamCar() {
         }
         returnToMenu();
     };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// TEST JOYSTICK
+// =====================================================
+
+static void drawJoystickState() {
+    screen.drawJoystick(joystick.getRawX(), joystick.getRawY(),
+                        joystick.getCenterX(), joystick.getCenterY(),
+                        joystick.getX(), joystick.getY(),
+                        joystick.getMagnitude(), joystick.getAngleDeg(),
+                        joystick.isUpDown(), joystick.isDownDown(),
+                        joystick.isLeftDown(), joystick.isRightDown());
+}
+
+static void joystickTestLoop() {
+    // Redibujar a ritmo fijo: el SPI de la pantalla es lento y el stick da
+    // valores nuevos en cada vuelta del loop.
+    static unsigned long lastMs = 0;
+    unsigned long now = millis();
+    if (now - lastMs < 80) return;
+    lastMs = now;
+    drawJoystickState();
+}
+
+void enterTestJoystick() {
+    speaker.stop();
+    drawJoystickState();
+    itemLoopCallback = joystickTestLoop;
+
+    ButtonActionCallbacks cbs;
+    // Sin callbacks de direccion: aqui interesa ver el stick crudo, no que
+    // navegue. OK recalibra con el stick suelto.
+    cbs.onOk   = []() {
+        joystick.calibrateCenter();
+        Serial.println("[JOY] centro recalibrado");
+        drawJoystickState();
+    };
+    cbs.onMenu = returnToMenu;
     buttons.setCallbacks(cbs);
 }
 

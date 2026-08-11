@@ -45,6 +45,22 @@ public:
 
     void setCallbacks(ButtonActionCallbacks callbacks);
 
+    // Devuelve los callbacks activos. Lo usa JoystickManager para disparar las
+    // mismas acciones que la cruceta sin que cada herramienta los registre dos
+    // veces.
+    ButtonActionCallbacks getCallbacks() const {
+        ButtonActionCallbacks c;
+        c.onMenu  = menuCallback;
+        c.onA     = aCallback;
+        c.onB     = bCallback;
+        c.onUp    = upCallback;
+        c.onDown  = downCallback;
+        c.onLeft  = leftCallback;
+        c.onRight = rightCallback;
+        c.onOk    = okCallback;
+        return c;
+    }
+
     bool isOkDown()    const { return digitalRead(config.bOkPin)    == LOW; }
     bool isUpDown()    const { return digitalRead(config.bUpPin)    == LOW; }
     bool isDownDown()  const { return digitalRead(config.bDownPin)  == LOW; }

@@ -1360,6 +1360,73 @@ void ScreenManager::drawBtKeyboard(bool active, bool connected,
 }
 
 // =====================================================
+// DRAW JOYSTICK
+// =====================================================
+
+void ScreenManager::drawJoystick(int rawX, int rawY, int centerX, int centerY,
+                                  float x, float y, float magnitude, float angle,
+                                  bool up, bool down, bool left, bool right) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t bx, by; uint16_t bw, bh;
+
+    tft.setTextSize(1);
+    tft.setTextColor(GC9A01A_CYAN);
+    const char* title = "JOYSTICK";
+    tft.getTextBounds(title, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 10);
+    tft.print(title);
+
+    // --- Area circular con la posicion del stick ---
+    const int CX = 120, CY = 104, R = 52;
+    tft.drawCircle(CX, CY, R, 0x4A49);
+    tft.drawFastHLine(CX - R, CY, R * 2, 0x2124);
+    tft.drawFastVLine(CX, CY - R, R * 2, 0x2124);
+
+    // Zona muerta (18% del radio), para ver cuando el stick cuenta como suelto
+    tft.drawCircle(CX, CY, (int)(R * 0.18f), 0x39C7);
+
+    // El eje Y de pantalla crece hacia abajo: se invierte para que arriba
+    // en el stick se dibuje arriba.
+    int px = CX + (int)(x * R);
+    int py = CY - (int)(y * R);
+    tft.drawLine(CX, CY, px, py, 0x632C);
+    tft.fillCircle(px, py, 6, magnitude > 0.0f ? GC9A01A_GREEN : GC9A01A_DARKGREY);
+
+    // --- Direcciones discretas activas ---
+    uint16_t on = GC9A01A_GREEN, off = 0x2124;
+    tft.fillTriangle(CX - 7, CY - R - 10, CX + 7, CY - R - 10, CX, CY - R - 20, up    ? on : off);
+    tft.fillTriangle(CX - 7, CY + R + 10, CX + 7, CY + R + 10, CX, CY + R + 20, down  ? on : off);
+    tft.fillTriangle(CX - R - 10, CY - 7, CX - R - 10, CY + 7, CX - R - 20, CY, left  ? on : off);
+    tft.fillTriangle(CX + R + 10, CY - 7, CX + R + 10, CY + 7, CX + R + 20, CY, right ? on : off);
+
+    // --- Numeros ---
+    char buf[40];
+    tft.setTextColor(GC9A01A_LIGHTGREY);
+
+    snprintf(buf, sizeof(buf), "raw %4d,%4d  c %4d,%4d", rawX, rawY, centerX, centerY);
+    tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 178);
+    tft.print(buf);
+
+    snprintf(buf, sizeof(buf), "x %+.2f  y %+.2f", x, y);
+    tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 191);
+    tft.print(buf);
+
+    snprintf(buf, sizeof(buf), "mag %.2f  ang %3.0f", magnitude, angle);
+    tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 204);
+    tft.print(buf);
+
+    tft.setTextColor(0x39C7);
+    const char* hint = "[OK] recalibrar centro";
+    tft.getTextBounds(hint, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 218);
+    tft.print(hint);
+}
+
+// =====================================================
 // DRAW LED STRIP
 // =====================================================
 

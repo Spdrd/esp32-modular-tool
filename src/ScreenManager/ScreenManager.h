@@ -101,6 +101,11 @@ public:
     void drawMusicControl(bool active, bool connected, const char* deviceName,
                           bool playing, const char* lastAction);
 
+    // Estado del joystick: posicion analogica + direcciones discretas activas.
+    void drawJoystick(int rawX, int rawY, int centerX, int centerY,
+                      float x, float y, float magnitude, float angle,
+                      bool up, bool down, bool left, bool right);
+
     // Tira LED por ESP-NOW. param = fila seleccionada (0..5):
     // 0 efecto, 1 brillo, 2 rojo, 3 verde, 4 azul, 5 velocidad.
     void drawLedStrip(int param, uint8_t effect, const char* effectName,

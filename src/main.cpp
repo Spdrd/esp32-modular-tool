@@ -14,10 +14,16 @@ void setup() {
     buttons.begin();
     buttons.setCallbacks(getMenuCallbacks());
 
+    // El stick reproduce los callbacks de direccion que cada herramienta ya
+    // registra en buttons, asi que no hay que configurarlo en cada una.
+    joystick.begin();
+    joystick.mirror(&buttons);
+
     renderMenu();
 }
 
 void loop() {
     buttons.update();
+    joystick.update();
     itemLoopUpdate();
 }

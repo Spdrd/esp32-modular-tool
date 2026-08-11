@@ -2,6 +2,7 @@
 
 #include "ScreenManager/ScreenManager.h"
 #include "ButtonManager/ButtonManager.h"
+#include "JoystickManager/JoystickManager.h"
 #include "SnakeGame/SnakeGame.h"
 #include "CronoManager/CronoManager.h"
 #include "DiceManager/DiceManager.h"
@@ -58,6 +59,15 @@
 // --- LINTERNA PIN ---
 #define LINTERNA_PIN 32
 
+// --- JOYSTICK (potenciometros 0-3.3V) ---
+// Tienen que ser pines de ADC1 (GPIO 32-39): el ADC2 deja de funcionar con el
+// WiFi encendido y aqui se usa ESP-NOW. Los GPIO 34/35 ademas son solo de
+// entrada, asi que no hay riesgo de excitarlos por error.
+#define JOY_X_PIN   34
+#define JOY_Y_PIN   35
+#define JOY_INVERT_X false
+#define JOY_INVERT_Y false
+
 // --- CAM CAR (ESP-NOW) ---
 // MAC del vehiculo ESP32-S3
 #define CAMCAR_MAC {0x80, 0xB5, 0x4E, 0xC6, 0xF9, 0x1C}
@@ -84,6 +94,7 @@ struct MenuSection {
 // --- EXTERN INSTANCES ---
 extern ScreenManager      screen;
 extern ButtonManager      buttons;
+extern JoystickManager    joystick;
 extern SnakeGame          snake;
 extern CronoManager       crono;
 extern DiceManager        dice;
@@ -128,6 +139,7 @@ void enterTestLeft();
 void enterTestRight();
 void enterTestOk();
 void enterTestAll();
+void enterTestJoystick();
 void enterFillRed();
 void enterFillGreen();
 void enterFillBlue();
