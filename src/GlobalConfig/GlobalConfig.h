@@ -49,9 +49,9 @@
 #define BTN_B     15
 #define BTN_UP    27
 #define BTN_DOWN  13
-#define BTN_LEFT  14
+#define BTN_LEFT  12
 #define BTN_RIGHT 26
-#define BTN_OK    12
+#define BTN_OK    14
 
 // -- SPREAKER PINS ---
 #define SPK_PIN   25
@@ -182,6 +182,7 @@ void enterLedStrip();
 void enterTecladoWasd();
 void enterTecladoMinecraft();
 void enterMusicControl();
+void enterBtMouse();
 void enterBtUnpair();
 void enterPong();
 void enterBreakout();

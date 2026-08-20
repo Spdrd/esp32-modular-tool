@@ -50,6 +50,15 @@ public:
     // cualquier valor 0x000-0x3FF). Es una accion puntual: pulsa y suelta.
     void consumerTap(uint16_t usage);
 
+    // --- Perfil HID: mouse ---
+    // dx/dy/wheel/pan son RELATIVOS y se recortan a [-127,127].
+    // buttons es una mascara HID_MOUSE_*.
+    void mouseReport(uint8_t buttons, int dx, int dy, int wheel = 0, int pan = 0);
+    void mouseMove(int dx, int dy);                 // conserva los botones pulsados
+    void mouseScroll(int wheel, int pan = 0);
+    void mouseSetButtons(uint8_t buttons);          // pulsar/soltar sin mover
+    uint8_t getMouseButtons() const { return mouseButtons; }
+
     // --- Vinculos (bonds) ---
     // Un host emparejado cachea la tabla de servicios y el descriptor HID, y
     // no los relee al reconectar. Si cambia lo que ofrece el dispositivo, hay
@@ -72,6 +81,9 @@ private:
     BLEHIDDevice*      hid;
     BLECharacteristic* inputKeyboard;
     BLECharacteristic* inputMedia;
+    BLECharacteristic* inputMouse;
+
+    uint8_t mouseButtons;   // estado sostenido de los botones del mouse
 
     // Estado del ultimo reporte enviado, para no repetir envios identicos
     uint8_t lastReport[8];

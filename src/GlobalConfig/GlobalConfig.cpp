@@ -1,4 +1,5 @@
 #include "GlobalConfig/GlobalConfig.h"
+#include <math.h>
 
 // =====================================================
 // PINS
@@ -120,14 +121,15 @@ static const MenuItem devicesItems[] = {
 };
 
 static const MenuItem bluetoothItems[] = {
-    {"Musica",           enterMusicControl},
+    {"Musica",            enterMusicControl},
+    {"Mouse",             enterBtMouse},
     {"Teclado WASD",      enterTecladoWasd},
     {"Teclado Minecraft", enterTecladoMinecraft}
 };
 
 static const MenuSection menuSections[] = {
     {"Info",       infoItems,      2},
-    {"Bluetooth",  bluetoothItems, 3},
+    {"Bluetooth",  bluetoothItems, 4},
     {"Mis Dispositivos", devicesItems, 2},
     {"Herramientas",toolsItems,    9},
     {"Juegos",     gamesItems,    10},
@@ -1462,9 +1464,14 @@ void enterTestJoystick() {
 enum { LP_EFFECT = 0, LP_BRIGHT, LP_R, LP_G, LP_B, LP_BPS, LP_COUNT };
 
 static int       s_lsParam = LP_EFFECT;
-static LedPacket s_lsPkt   = { LED_FX_SOLID, 128, 255, 80, 0, 20 };
+// Estado inicial: blanco solido a brillo maximo. Al entrar se reenvia, asi la
+// tira arranca siempre en un punto conocido sin importar como quedo antes.
+// Campos: { effect, brightness, r, g, b, bps }
+static const LedPacket LS_DEFAULT_PKT = { LED_FX_SOLID, 255, 255, 255, 255, 20 };
 
-static uint8_t   s_lsBrightBackup = 128;   // para el apagado rapido con [B]
+static LedPacket s_lsPkt   = LS_DEFAULT_PKT;
+
+static uint8_t   s_lsBrightBackup = 255;   // para el apagado rapido con [B]
 
 static unsigned long s_lsSendMs   = 0;
 static unsigned long s_lsAdjStart = 0;
@@ -1537,10 +1544,15 @@ void enterLedStrip() {
     speaker.stop();
     ledStrip.begin();
 
+    // Se vuelve al blanco a tope en cada entrada: el ESP32 no sabe que esta
+    // mostrando la tira (no hay ACK de aplicacion), asi que partir siempre del
+    // mismo estado es lo unico que garantiza que pantalla y tira coinciden.
+    s_lsPkt           = LS_DEFAULT_PKT;
+    s_lsBrightBackup  = LS_DEFAULT_PKT.brightness;
+
     s_lsParam   = LP_EFFECT;
     s_lsAdjDir  = 0;
     s_lsSendMs  = 0;
-    drawLedStripState();
     ledStripSend(true);    // estado inicial, para que la tira arranque igual
     drawLedStripState();
 
@@ -1575,6 +1587,160 @@ void enterLedStrip() {
     };
     cbs.onOk    = []() { ledStripSend(true); drawLedStripState(); };
     cbs.onMenu  = []() { ledStrip.end(); returnToMenu(); };
+    buttons.setCallbacks(cbs);
+}
+
+// =====================================================
+// BLUETOOTH - MOUSE
+// =====================================================
+
+// Stick mueve el puntero, boton del stick = autoscroll (boton central),
+// A/B = click izquierdo/derecho, UP/DOWN = rueda, LEFT/RIGHT = pestanas.
+
+static bool          s_msLeft      = false;
+static bool          s_msRight     = false;
+static bool          s_msMiddle    = false;
+static bool          s_msConnected = false;
+static const char*   s_msAction    = "";
+static unsigned long s_msActionMs  = 0;
+static unsigned long s_msMoveMs    = 0;
+
+static const unsigned long MS_MOVE_PERIOD_MS   = 20;    // 50 reportes/s
+static const unsigned long MS_ACTION_HOLD_MS   = 900;
+static const float         MS_MAX_SPEED        = 14.0f; // px por reporte
+
+static void drawBtMouseState() {
+    screen.drawBtMouse(bt.isActive(), bt.isConnected(), bt.getDeviceName(),
+                       joystick.getX(), joystick.getY(),
+                       s_msLeft, s_msRight, s_msMiddle, s_msAction);
+}
+
+static void msFlash(const char* label) {
+    s_msAction   = label;
+    s_msActionMs = millis();
+}
+
+static uint8_t msButtonMask() {
+    uint8_t m = 0;
+    if (s_msLeft)   m |= HID_MOUSE_LEFT;
+    if (s_msRight)  m |= HID_MOUSE_RIGHT;
+    if (s_msMiddle) m |= HID_MOUSE_MIDDLE;
+    return m;
+}
+
+// Curva de aceleracion: el desplazamiento crece con el cuadrado de la
+// desviacion, para tener precision fina cerca del centro y velocidad util
+// en los extremos.
+static int msAxisDelta(float v) {
+    if (v == 0.0f) return 0;
+    float mag = fabsf(v);
+    float d   = mag * mag * MS_MAX_SPEED;
+    int   out = (int)(d + 0.5f);
+    if (out == 0) out = 1;              // que un empuje minimo siempre mueva
+    return (v < 0) ? -out : out;
+}
+
+static void btMouseLoop() {
+    unsigned long now = millis();
+
+    // --- Boton central sostenido (autoscroll) ---
+    // Los gestos estan apagados en esta herramienta, asi que el boton del
+    // stick se lee crudo.
+    bool middleNow = joystick.isButtonDown();
+    if (middleNow != s_msMiddle) {
+        s_msMiddle = middleNow;
+        bt.mouseSetButtons(msButtonMask());
+        msFlash(s_msMiddle ? "AUTOSCROLL" : "");
+        drawBtMouseState();
+    }
+
+    // --- Movimiento del puntero ---
+    if (now - s_msMoveMs >= MS_MOVE_PERIOD_MS) {
+        s_msMoveMs = now;
+        int dx = msAxisDelta(joystick.getX());
+        // El eje Y de la pantalla crece hacia abajo, al reves que el stick
+        int dy = -msAxisDelta(joystick.getY());
+        if (dx != 0 || dy != 0) bt.mouseMove(dx, dy);
+    }
+
+    // Limpiar la etiqueta pasado su tiempo
+    if (s_msActionMs != 0 && now - s_msActionMs >= MS_ACTION_HOLD_MS) {
+        s_msAction   = "";
+        s_msActionMs = 0;
+        drawBtMouseState();
+    }
+
+    // Solo se redibuja ante cambios reales. Un refresco periodico daria un
+    // indicador del stick mas vivo, pero cada repintado bloquea el SPI decenas
+    // de ms y eso se nota como tirones en el puntero, que va a 50 reportes/s.
+    if (bt.isConnected() != s_msConnected) {
+        s_msConnected = bt.isConnected();
+        drawBtMouseState();
+    }
+}
+
+void enterBtMouse() {
+    speaker.stop();
+    bt.begin();
+
+    // Aqui la cruz y el stick hacen cosas DISTINTAS, asi que se corta el
+    // espejo: el stick solo alimenta el puntero por su interfaz analogica, y
+    // las direcciones (scroll y pestanas) llegan solo de la cruz fisica. Con
+    // el espejo puesto, empujar el stick arriba movia el cursor y ademas
+    // disparaba onUp, o sea scroll simultaneo.
+    joystick.mirror(nullptr);
+
+    // El boton del stick es el autoscroll: se mantiene pulsado con sentido
+    // propio, asi que su duracion no puede significar ademas A, B o MENU.
+    joystick.setGesturesEnabled(false);
+
+    s_msLeft = s_msRight = s_msMiddle = false;
+    s_msAction    = "";
+    s_msActionMs  = 0;
+    s_msMoveMs    = 0;
+    s_msConnected = bt.isConnected();
+    drawBtMouseState();
+
+    itemLoopCallback = btMouseLoop;
+
+    ButtonActionCallbacks cbs;
+    cbs.onA = []() {
+        s_msLeft = !s_msLeft;   // toggle: permite arrastrar sin mantener
+        bt.mouseSetButtons(msButtonMask());
+        msFlash(s_msLeft ? "IZQ ABAJO" : "IZQ CLICK");
+        drawBtMouseState();
+    };
+    cbs.onB = []() {
+        s_msRight = !s_msRight;
+        bt.mouseSetButtons(msButtonMask());
+        msFlash(s_msRight ? "DER ABAJO" : "DER CLICK");
+        drawBtMouseState();
+    };
+    cbs.onUp    = []() { bt.mouseScroll( 1); msFlash("SCROLL +"); drawBtMouseState(); };
+    cbs.onDown  = []() { bt.mouseScroll(-1); msFlash("SCROLL -"); drawBtMouseState(); };
+    // Cambiar de pestana es un atajo de teclado, no una accion de mouse
+    cbs.onRight = []() {
+        bt.keyTap(HID_KEY_TAB, HID_MOD_LCTRL);
+        msFlash("PESTANA >");
+        drawBtMouseState();
+    };
+    cbs.onLeft  = []() {
+        bt.keyTap(HID_KEY_TAB, HID_MOD_LCTRL | HID_MOD_LSHIFT);
+        msFlash("< PESTANA");
+        drawBtMouseState();
+    };
+    cbs.onOk    = []() {
+        // Soltar todo, por si quedo algun boton enganchado
+        s_msLeft = s_msRight = false;
+        bt.mouseSetButtons(msButtonMask());
+        msFlash("SOLTAR");
+        drawBtMouseState();
+    };
+    cbs.onMenu  = []() {
+        bt.mouseSetButtons(0);   // no dejar botones pulsados en el host
+        bt.end();
+        returnToMenu();          // reactiva los gestos del stick
+    };
     buttons.setCallbacks(cbs);
 }
 
@@ -1910,6 +2076,11 @@ static void onItemOk() {
 void returnToMenu() {
     itemLoopCallback = nullptr;
     speaker.stop();
+    // Red de seguridad: una herramienta que desacople el stick (espejo o
+    // gestos) no puede dejar el menu asi, o se quedaria sin forma de navegar
+    // ni de salir. Se restaura el comportamiento por defecto al volver.
+    joystick.setGesturesEnabled(true);
+    joystick.mirror(&buttons);
     buttons.setCallbacks(getMenuCallbacks());
     renderMenu();
 }

@@ -1559,6 +1559,86 @@ void ScreenManager::drawLedStrip(int param, uint8_t effect, const char* effectNa
 }
 
 // =====================================================
+// DRAW BT MOUSE
+// =====================================================
+
+void ScreenManager::drawBtMouse(bool active, bool connected, const char* deviceName,
+                                 float x, float y, bool left, bool right, bool middle,
+                                 const char* lastAction) {
+    tft.fillScreen(GC9A01A_BLACK);
+
+    int16_t bx, by; uint16_t bw, bh;
+
+    tft.setTextSize(2);
+    tft.setTextColor(GC9A01A_CYAN);
+    const char* title = "MOUSE";
+    tft.getTextBounds(title, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 14);
+    tft.print(title);
+
+    const char* status;
+    uint16_t statusColor;
+    if (!active)        { status = "BT APAGADO";   statusColor = GC9A01A_DARKGREY; }
+    else if (connected) { status = "CONECTADO";    statusColor = GC9A01A_GREEN;    }
+    else                { status = "EMPAREJAR..."; statusColor = GC9A01A_YELLOW;   }
+
+    tft.setTextSize(1);
+    tft.setTextColor(statusColor);
+    tft.getTextBounds(status, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 38);
+    tft.print(status);
+
+    if (active && !connected && deviceName) {
+        tft.setTextColor(0x7BEF);
+        tft.getTextBounds(deviceName, 0, 0, &bx, &by, &bw, &bh);
+        tft.setCursor((240 - bw) / 2, 50);
+        tft.print(deviceName);
+    }
+
+    // --- Cuerpo del mouse con sus botones ---
+    const int MX = 88, MY = 66, MW = 64, MH = 74;
+    tft.drawRoundRect(MX, MY, MW, MH, 14, 0x632C);
+
+    // Izquierdo y derecho arriba, rueda al medio
+    tft.fillRoundRect(MX + 3,  MY + 3, MW / 2 - 5, 28, 8, left  ? GC9A01A_GREEN : 0x2124);
+    tft.fillRoundRect(MX + MW / 2 + 2, MY + 3, MW / 2 - 5, 28, 8, right ? GC9A01A_GREEN : 0x2124);
+    tft.fillRoundRect(MX + MW / 2 - 5, MY + 6, 10, 22, 5, middle ? GC9A01A_YELLOW : 0x4A49);
+
+    // Vector del stick dentro del cuerpo
+    const int SCX = MX + MW / 2, SCY = MY + 52;
+    tft.drawCircle(SCX, SCY, 15, 0x39C7);
+    int px = SCX + (int)(x * 15);
+    int py = SCY - (int)(y * 15);
+    tft.fillCircle(px, py, 4, (x != 0.0f || y != 0.0f) ? GC9A01A_CYAN : GC9A01A_DARKGREY);
+
+    // Etiqueta de la ultima accion
+    if (lastAction && lastAction[0]) {
+        tft.setTextSize(2);
+        tft.setTextColor(GC9A01A_YELLOW);
+        tft.getTextBounds(lastAction, 0, 0, &bx, &by, &bw, &bh);
+        tft.setCursor((240 - bw) / 2, 150);
+        tft.print(lastAction);
+    }
+
+    tft.setTextSize(1);
+    tft.setTextColor(0x39C7);
+    const char* h1 = "stick mueve  [A]izq [B]der";
+    tft.getTextBounds(h1, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 182);
+    tft.print(h1);
+
+    const char* h2 = "^v scroll   <> pestana";
+    tft.getTextBounds(h2, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 196);
+    tft.print(h2);
+
+    const char* h3 = "click stick = autoscroll";
+    tft.getTextBounds(h3, 0, 0, &bx, &by, &bw, &bh);
+    tft.setCursor((240 - bw) / 2, 210);
+    tft.print(h3);
+}
+
+// =====================================================
 // DRAW MUSIC CONTROL
 // =====================================================
 

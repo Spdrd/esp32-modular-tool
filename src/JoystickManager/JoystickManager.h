@@ -91,6 +91,13 @@ public:
     // feedback en pantalla mientras se mantiene pulsado.
     JoyGesture getPendingGesture() const { return pendingGesture; }
 
+    // Desactiva los gestos para que el boton sea una pulsacion cruda. Lo
+    // necesitan las herramientas donde el boton se mantiene pulsado con
+    // sentido propio (el autoscroll del mouse), porque ahi la duracion no
+    // puede significar tambien A, B o MENU. returnToMenu() los reactiva.
+    void setGesturesEnabled(bool enabled);
+    bool gesturesEnabled() const { return gesturesOn; }
+
     // --- Callbacks ---
     // Espeja los de ButtonManager: el stick dispara las mismas acciones de
     // direccion que la cruceta sin duplicar la configuracion de cada tool.
@@ -115,6 +122,7 @@ private:
     unsigned long swDebounceMs;
     unsigned long swPressMs;
     JoyGesture    pendingGesture;
+    bool          gesturesOn;
 
     unsigned long repeatStartMs;
     unsigned long repeatLastMs;

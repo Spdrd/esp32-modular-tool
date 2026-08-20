@@ -175,6 +175,15 @@
 #define HID_CC_BRIGHT_UP    0x006F
 #define HID_CC_BRIGHT_DOWN  0x0070
 
+// =====================================================
+// Mouse: mascara de botones del reporte ID 3
+// =====================================================
+#define HID_MOUSE_LEFT      0x01
+#define HID_MOUSE_RIGHT     0x02
+#define HID_MOUSE_MIDDLE    0x04
+#define HID_MOUSE_BACK      0x08
+#define HID_MOUSE_FORWARD   0x10
+
 // --- Aplicaciones / navegador ---
 #define HID_CC_CALCULATOR   0x0192
 #define HID_CC_EMAIL        0x018A

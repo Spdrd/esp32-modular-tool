@@ -30,7 +30,7 @@ JoystickManager::JoystickManager(JoystickPinConfig config)
       heldUp(false), heldDown(false), heldLeft(false), heldRight(false),
       dominant(JOY_NONE), lastFired(JOY_NONE),
       swHeld(false), swLastRead(false), swDebounceMs(0), swPressMs(0),
-      pendingGesture(JOY_GESTURE_NONE),
+      pendingGesture(JOY_GESTURE_NONE), gesturesOn(true),
       repeatStartMs(0), repeatLastMs(0),
       mirrored(nullptr) {}
 
@@ -179,7 +179,7 @@ void JoystickManager::updateButton() {
         swHeld = reading;
         if (swHeld) {
             swPressMs = now;
-        } else {
+        } else if (gesturesOn) {
             // fireGesture puede cambiar los callbacks (MENU sale de la
             // herramienta), asi que el estado se deja limpio antes.
             JoyGesture g = classifyHold(now - swPressMs);
@@ -189,7 +189,15 @@ void JoystickManager::updateButton() {
         }
     }
 
-    pendingGesture = swHeld ? classifyHold(now - swPressMs) : JOY_GESTURE_NONE;
+    // Con los gestos apagados el boton solo reporta estado: quien lo use lee
+    // isButtonDown() y decide que hacer.
+    pendingGesture = (gesturesOn && swHeld) ? classifyHold(now - swPressMs)
+                                            : JOY_GESTURE_NONE;
+}
+
+void JoystickManager::setGesturesEnabled(bool enabled) {
+    gesturesOn     = enabled;
+    pendingGesture = JOY_GESTURE_NONE;
 }
 
 void JoystickManager::update() {

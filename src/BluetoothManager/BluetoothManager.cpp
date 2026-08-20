@@ -77,6 +77,56 @@ static const uint8_t HID_KEYBOARD_REPORT_MAP[] = {
     0x75, 0x10,        //   Report Size (16)
     0x95, 0x01,        //   Report Count (1)
     0x81, 0x00,        //   Input (Data, Array) -> un codigo de uso por reporte
+    0xC0,              // End Collection
+
+    // --- Mouse (report ID 3) ---
+    // Payload de 5 bytes: [botones][dX][dY][rueda][pan horizontal].
+    // Se incluyen los 5 botones y el pan aunque hoy no se usen todos: ampliar
+    // el descriptor mas adelante obligaria a re-emparejar todos los hosts.
+    0x05, 0x01,        // Usage Page (Generic Desktop)
+    0x09, 0x02,        // Usage (Mouse)
+    0xA1, 0x01,        // Collection (Application)
+    0x85, 0x03,        //   Report ID (3)
+    0x09, 0x01,        //   Usage (Pointer)
+    0xA1, 0x00,        //   Collection (Physical)
+
+    0x05, 0x09,        //     Usage Page (Button)
+    0x19, 0x01,        //     Usage Minimum (boton 1)
+    0x29, 0x05,        //     Usage Maximum (boton 5)
+    0x15, 0x00,        //     Logical Minimum (0)
+    0x25, 0x01,        //     Logical Maximum (1)
+    0x75, 0x01,        //     Report Size (1)
+    0x95, 0x05,        //     Report Count (5)
+    0x81, 0x02,        //     Input (Data, Variable, Absolute)
+    0x75, 0x03,        //     Report Size (3)
+    0x95, 0x01,        //     Report Count (1)
+    0x81, 0x03,        //     Input (Constant) -> relleno hasta el byte
+
+    0x05, 0x01,        //     Usage Page (Generic Desktop)
+    0x09, 0x30,        //     Usage (X)
+    0x09, 0x31,        //     Usage (Y)
+    0x15, 0x81,        //     Logical Minimum (-127)
+    0x25, 0x7F,        //     Logical Maximum (127)
+    0x75, 0x08,        //     Report Size (8)
+    0x95, 0x02,        //     Report Count (2)
+    0x81, 0x06,        //     Input (Data, Variable, Relative)
+
+    0x09, 0x38,        //     Usage (Wheel)
+    0x15, 0x81,        //     Logical Minimum (-127)
+    0x25, 0x7F,        //     Logical Maximum (127)
+    0x75, 0x08,        //     Report Size (8)
+    0x95, 0x01,        //     Report Count (1)
+    0x81, 0x06,        //     Input (Data, Variable, Relative)
+
+    0x05, 0x0C,        //     Usage Page (Consumer)
+    0x0A, 0x38, 0x02,  //     Usage (AC Pan) -> rueda horizontal
+    0x15, 0x81,        //     Logical Minimum (-127)
+    0x25, 0x7F,        //     Logical Maximum (127)
+    0x75, 0x08,        //     Report Size (8)
+    0x95, 0x01,        //     Report Count (1)
+    0x81, 0x06,        //     Input (Data, Variable, Relative)
+
+    0xC0,              //   End Collection
     0xC0               // End Collection
 };
 
@@ -142,7 +192,8 @@ static BtReportCallbacks s_reportCallbacks;
 
 BluetoothManager::BluetoothManager(BluetoothConfig config)
     : config(config), active(false), connected(false),
-      server(nullptr), hid(nullptr), inputKeyboard(nullptr), inputMedia(nullptr) {
+      server(nullptr), hid(nullptr), inputKeyboard(nullptr), inputMedia(nullptr),
+      inputMouse(nullptr), mouseButtons(0) {
     memset(lastReport, 0, sizeof(lastReport));
 }
 
@@ -158,10 +209,10 @@ void BluetoothManager::onConnectEvent(bool isConnected) {
 // reconectar -porque por spec el servidor deberia recordar la suscripcion- y
 // Bluedroid no la persiste. Sin esto el teclado emparejado "no responde".
 void BluetoothManager::enableNotifications() {
-    BLECharacteristic* reports[] = { inputKeyboard, inputMedia };
-    const char*        names[]   = { "teclado", "media" };
+    BLECharacteristic* reports[] = { inputKeyboard, inputMedia, inputMouse };
+    const char*        names[]   = { "teclado", "media", "mouse" };
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         if (!reports[i]) continue;
         BLE2902* cccd = (BLE2902*)reports[i]->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
         Serial.print("[BT] CCCD ");
@@ -209,9 +260,11 @@ bool BluetoothManager::begin() {
     inputKeyboard = hid->inputReport(1);
     hid->outputReport(1);   // el report map declara LEDs; el host escribe aqui
     inputMedia    = hid->inputReport(2);   // control multimedia
+    inputMouse    = hid->inputReport(3);   // mouse
 
     inputKeyboard->setCallbacks(&s_reportCallbacks);
     inputMedia->setCallbacks(&s_reportCallbacks);
+    inputMouse->setCallbacks(&s_reportCallbacks);
 
     // Ojo: manufacturer() sin argumentos NO es un getter, es quien crea la
     // caracteristica. El constructor de BLEHIDDevice no la crea, asi que
@@ -276,6 +329,8 @@ void BluetoothManager::end() {
     hid           = nullptr;
     inputKeyboard = nullptr;
     inputMedia    = nullptr;
+    inputMouse    = nullptr;
+    mouseButtons  = 0;
     instance      = nullptr;
     connected     = false;
     active        = false;
@@ -352,6 +407,46 @@ int BluetoothManager::clearBonds() {
 // =====================================================
 // HID - CONSUMER CONTROL
 // =====================================================
+
+// =====================================================
+// HID - MOUSE
+// =====================================================
+
+static int8_t clampDelta(int v) {
+    if (v >  127) return  127;
+    if (v < -127) return -127;
+    return (int8_t)v;
+}
+
+void BluetoothManager::mouseReport(uint8_t buttons, int dx, int dy, int wheel, int pan) {
+    if (!active || !connected || !inputMouse) return;
+
+    mouseButtons = buttons;
+
+    uint8_t rep[5];
+    rep[0] = buttons;
+    rep[1] = (uint8_t)clampDelta(dx);
+    rep[2] = (uint8_t)clampDelta(dy);
+    rep[3] = (uint8_t)clampDelta(wheel);
+    rep[4] = (uint8_t)clampDelta(pan);
+
+    // Sin deduplicacion: los movimientos son relativos, asi que dos reportes
+    // iguales seguidos son dos desplazamientos distintos, no una repeticion.
+    inputMouse->setValue(rep, 5);
+    inputMouse->notify();
+}
+
+void BluetoothManager::mouseMove(int dx, int dy) {
+    mouseReport(mouseButtons, dx, dy, 0, 0);
+}
+
+void BluetoothManager::mouseScroll(int wheel, int pan) {
+    mouseReport(mouseButtons, 0, 0, wheel, pan);
+}
+
+void BluetoothManager::mouseSetButtons(uint8_t buttons) {
+    mouseReport(buttons, 0, 0, 0, 0);
+}
 
 void BluetoothManager::consumerTap(uint16_t usage) {
     if (!active || !connected || !inputMedia) return;

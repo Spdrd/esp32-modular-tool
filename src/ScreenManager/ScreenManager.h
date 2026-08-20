@@ -101,6 +101,11 @@ public:
     void drawMusicControl(bool active, bool connected, const char* deviceName,
                           bool playing, const char* lastAction);
 
+    // Mouse BLE. x/y = posicion del stick (-1..1) para el indicador.
+    void drawBtMouse(bool active, bool connected, const char* deviceName,
+                     float x, float y, bool left, bool right, bool middle,
+                     const char* lastAction);
+
     // Estado del joystick: posicion analogica + direcciones discretas activas.
     void drawJoystick(int rawX, int rawY, int centerX, int centerY,
                       float x, float y, float magnitude, float angle,
