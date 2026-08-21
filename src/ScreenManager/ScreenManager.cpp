@@ -1547,7 +1547,7 @@ void ScreenManager::drawLedStrip(int param, uint8_t effect, const char* effectNa
 
     // Ayuda
     tft.setTextColor(0x39C7);
-    const char* h1 = "<> param   ^v valor";
+    const char* h1 = "^v param   <> valor";
     tft.getTextBounds(h1, 0, 0, &bx, &by, &bw, &bh);
     tft.setCursor((240 - bw) / 2, 192);
     tft.print(h1);

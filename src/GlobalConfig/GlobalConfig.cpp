@@ -1457,7 +1457,7 @@ void enterTestJoystick() {
 // TIRA LED (ESP-NOW)
 // =====================================================
 
-// LEFT/RIGHT elige parametro, UP/DOWN lo ajusta (con repeticion al mantener).
+// UP/DOWN elige parametro, LEFT/RIGHT lo ajusta (con repeticion al mantener).
 // Cada cambio se envia solo, limitado a un paquete cada 60ms para no saturar
 // la radio mientras se mantiene pulsado.
 
@@ -1521,9 +1521,10 @@ static void ledStripAdjust(int dir) {
 static void ledStripLoop() {
     unsigned long now = millis();
 
+    // LEFT/RIGHT sostenidos ajustan el valor del parametro activo
     int dir = 0;
-    if      (inputUp())   dir =  1;
-    else if (inputDown()) dir = -1;
+    if      (inputRight()) dir =  1;
+    else if (inputLeft())  dir = -1;
 
     if (dir != 0) {
         bool first = (dir != s_lsAdjDir);
@@ -1559,12 +1560,13 @@ void enterLedStrip() {
     itemLoopCallback = ledStripLoop;
 
     ButtonActionCallbacks cbs;
-    // UP/DOWN se leen sostenidos en ledStripLoop
-    cbs.onLeft  = []() {
+    // LEFT/RIGHT se leen sostenidos en ledStripLoop para ajustar el valor.
+    // UP/DOWN se mueven entre parametros (por callback, no sostenido).
+    cbs.onUp    = []() {
         s_lsParam = (s_lsParam - 1 + LP_COUNT) % LP_COUNT;
         drawLedStripState();
     };
-    cbs.onRight = []() {
+    cbs.onDown  = []() {
         s_lsParam = (s_lsParam + 1) % LP_COUNT;
         drawLedStripState();
     };
@@ -1580,7 +1582,7 @@ void enterLedStrip() {
             s_lsBrightBackup   = s_lsPkt.brightness;
             s_lsPkt.brightness = 0;
         } else {
-            s_lsPkt.brightness = s_lsBrightBackup > 0 ? s_lsBrightBackup : 128;
+             s_lsPkt.brightness = s_lsBrightBackup > 0 ? s_lsBrightBackup : 128;
         }
         ledStripSend(true);
         drawLedStripState();
