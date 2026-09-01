@@ -61,6 +61,7 @@ public:
         return c;
     }
 
+    bool isMenuDown()  const { return digitalRead(config.bMenuPin)  == LOW; }
     bool isOkDown()    const { return digitalRead(config.bOkPin)    == LOW; }
     bool isUpDown()    const { return digitalRead(config.bUpPin)    == LOW; }
     bool isDownDown()  const { return digitalRead(config.bDownPin)  == LOW; }

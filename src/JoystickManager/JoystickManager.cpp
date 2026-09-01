@@ -30,7 +30,7 @@ JoystickManager::JoystickManager(JoystickPinConfig config)
       heldUp(false), heldDown(false), heldLeft(false), heldRight(false),
       dominant(JOY_NONE), lastFired(JOY_NONE),
       swHeld(false), swLastRead(false), swDebounceMs(0), swPressMs(0),
-      pendingGesture(JOY_GESTURE_NONE), gesturesOn(true),
+      pendingGesture(JOY_GESTURE_NONE), gesturesOn(true), enabled(true),
       repeatStartMs(0), repeatLastMs(0),
       mirrored(nullptr) {}
 
@@ -48,8 +48,16 @@ void JoystickManager::begin() {
     // tiene (los 34-39 no), por eso el boton va ahi y no en otro ADC1.
     pinMode(config.swPin, INPUT_PULLUP);
 
+    // Switch de habilitacion (opcional). Activo-bajo usa el pull-up interno,
+    // asi que sin conectar nada el pin flota alto = deshabilitado, que es el
+    // comportamiento deseado (sin switch fisico presente, no hay stick).
+    if (config.enablePin >= 0) {
+        pinMode(config.enablePin, config.enableActiveLow ? INPUT_PULLUP : INPUT);
+    }
+
     delay(10);
     calibrateCenter();
+    enabled = readEnableSwitch();
 
     Serial.print("[JOY] centro X=");
     Serial.print(centerX);
@@ -195,12 +203,44 @@ void JoystickManager::updateButton() {
                                             : JOY_GESTURE_NONE;
 }
 
-void JoystickManager::setGesturesEnabled(bool enabled) {
-    gesturesOn     = enabled;
+void JoystickManager::setGesturesEnabled(bool on) {
+    gesturesOn     = on;
     pendingGesture = JOY_GESTURE_NONE;
 }
 
+// Sin switch configurado el stick siempre esta habilitado. Con switch, "en
+// contacto" = habilitado. Activo-bajo: contacto lleva el pin a masa (LOW).
+bool JoystickManager::readEnableSwitch() const {
+    if (config.enablePin < 0) return true;
+    int level = digitalRead(config.enablePin);
+    bool contact = config.enableActiveLow ? (level == LOW) : (level == HIGH);
+    return contact;
+}
+
+// Deja todo en reposo: ni movimiento, ni direcciones, ni boton. Se usa cuando
+// el switch deshabilita el stick, para que nada quede "pegado".
+void JoystickManager::clearState() {
+    normX = normY = 0;
+    heldUp = heldDown = heldLeft = heldRight = false;
+    dominant = lastFired = JOY_NONE;
+    swHeld = false;
+    swLastRead = false;
+    pendingGesture = JOY_GESTURE_NONE;
+    emaReady = false;   // al reactivar, el filtro arranca limpio
+}
+
 void JoystickManager::update() {
+    // Switch de habilitacion: si esta abierto, el stick queda inerte. Se
+    // limpia el estado una sola vez en la transicion a deshabilitado para no
+    // dejar una direccion o el boton pegados.
+    bool nowEnabled = readEnableSwitch();
+    if (nowEnabled != enabled) {
+        enabled = nowEnabled;
+        Serial.println(enabled ? "[JOY] habilitado (switch)" : "[JOY] deshabilitado (switch)");
+        if (!enabled) clearState();
+    }
+    if (!enabled) return;
+
     // Antes que nada: mas abajo hay un return temprano cuando el stick esta
     // centrado, y el boton tiene que responder tambien en reposo.
     updateButton();

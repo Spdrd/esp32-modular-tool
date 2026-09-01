@@ -5,7 +5,9 @@
 struct JoystickPinConfig {
     int  xPin;
     int  yPin;
-    int  swPin;      // boton integrado del stick, activo en bajo
+    int  swPin;         // boton integrado del stick, activo en bajo
+    int  enablePin;     // switch de habilitacion (-1 = sin switch, siempre activo)
+    bool enableActiveLow; // true: contacto = a masa (con pull-up interno)
     bool invertX;
     bool invertY;
 };
@@ -87,6 +89,11 @@ public:
     // buttons.isOkDown() es el fisico, joystick.isButtonDown() es el del stick.
     bool isButtonDown() const { return swHeld; }
 
+    // Switch de habilitacion: si esta en contacto el stick funciona, si no
+    // queda inerte (no mueve, no dispara, se reporta centrado y sin boton).
+    // Sin switch configurado (enablePin < 0) siempre esta habilitado.
+    bool isEnabled() const { return enabled; }
+
     // Gesto que se disparara si se suelta ahora mismo. Sirve para dar
     // feedback en pantalla mientras se mantiene pulsado.
     JoyGesture getPendingGesture() const { return pendingGesture; }
@@ -123,6 +130,7 @@ private:
     unsigned long swPressMs;
     JoyGesture    pendingGesture;
     bool          gesturesOn;
+    bool          enabled;      // estado del switch de habilitacion
 
     unsigned long repeatStartMs;
     unsigned long repeatLastMs;
@@ -134,6 +142,8 @@ private:
     float normalize(int raw, int center, bool invert) const;
     void  fire(JoyDirection dir);
     void  updateButton();
+    bool  readEnableSwitch() const;
+    void  clearState();          // deja todo en reposo (stick deshabilitado)
     void  fireGesture(JoyGesture g);
     JoyGesture classifyHold(unsigned long heldMs) const;
     ButtonActionCallbacks activeCallbacks() const;

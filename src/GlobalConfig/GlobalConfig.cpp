@@ -26,11 +26,13 @@ ButtonPinConfig buttonConfig = {
 };
 
 static JoystickPinConfig joystickConfig = {
-    .xPin    = JOY_X_PIN,
-    .yPin    = JOY_Y_PIN,
-    .swPin   = JOY_SW_PIN,
-    .invertX = JOY_INVERT_X,
-    .invertY = JOY_INVERT_Y
+    .xPin            = JOY_X_PIN,
+    .yPin            = JOY_Y_PIN,
+    .swPin           = JOY_SW_PIN,
+    .enablePin       = JOY_ENABLE_PIN,
+    .enableActiveLow = JOY_ENABLE_ACTIVE_LOW,
+    .invertX         = JOY_INVERT_X,
+    .invertY         = JOY_INVERT_Y
 };
 
 ButtonManager buttons(buttonConfig);
@@ -2064,6 +2066,19 @@ ButtonActionCallbacks getMenuCallbacks() {
     cbs.onDown  = onMenuDown;
     cbs.onOk    = onMenuOk;
     return cbs;
+}
+
+// Redibuja lo que hay ahora mismo en pantalla sin cambiar de estado. Tras un
+// reinit del display la pantalla queda en negro, asi que hay que repintar:
+// si hay una herramienta activa se reejecuta su onEnter (que la redibuja), y
+// si estamos en el menu se redibuja el menu en su seccion/item actual.
+void redrawCurrentState() {
+    if (itemLoopCallback != nullptr) {
+        const MenuItem* item = &sections[currentSection].items[currentItem];
+        if (item->onEnter) item->onEnter();
+    } else {
+        renderMenu();
+    }
 }
 
 // =====================================================

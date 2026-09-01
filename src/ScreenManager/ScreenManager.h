@@ -39,6 +39,7 @@ public:
     ScreenManager(ScreenPinConfig config);
 
     void begin();
+    void reinit(int rstPin); // pulsa RST y reinicia el controlador sin resetear el ESP32
     void update(String text);
     void clear();
 

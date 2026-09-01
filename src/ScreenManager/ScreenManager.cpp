@@ -91,6 +91,37 @@ void ScreenManager::begin() {
 }
 
 // =====================================================
+// REINIT  (recuperar pantalla desconectada sin reiniciar el ESP32)
+// =====================================================
+//
+// Pulsa el RST del display (GPIO del controlador GC9A01A, no el del ESP32) y
+// reinicia el chip de la pantalla. No toca SPI ni el estado del firmware: al
+// volver, la herramienta activa se redibuja sola. Quien llame a esto debe
+// repintar despues lo que corresponda.
+
+void ScreenManager::reinit(int rstPin) {
+    Serial.println("[SCREEN] reinit: pulsando RST del display...");
+
+    pinMode(rstPin, OUTPUT);
+    digitalWrite(rstPin, LOW);
+    delay(15);
+    digitalWrite(rstPin, HIGH);
+    delay(120);   // el GC9A01A necesita margen tras salir de reset
+
+    tft.begin();
+    tft.setRotation(1);
+    tft.fillScreen(GC9A01A_BLACK);
+
+    // El decoder JPEG guarda su callback globalmente; begin() no lo pierde,
+    // pero se reafirma por si el reset dejo algo a medias.
+    screenInstance = this;
+    TJpgDec.setCallback(tftOutput);
+    TJpgDec.setJpgScale(1);
+
+    Serial.println("[SCREEN] reinit completo");
+}
+
+// =====================================================
 // UPDATE
 // =====================================================
 

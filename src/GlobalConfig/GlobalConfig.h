@@ -71,6 +71,13 @@
 #define JOY_INVERT_X true
 #define JOY_INVERT_Y false
 
+// Switch de habilitacion del joystick. En contacto (cierra a masa) habilita el
+// stick; abierto lo deja inerte. Activo-bajo: usa el pull-up interno, asi que
+// necesita un pin que lo tenga (no los 34-39). El 17 esta libre.
+// Poner JOY_ENABLE_PIN en -1 para desactivar el switch (stick siempre activo).
+#define JOY_ENABLE_PIN        17
+#define JOY_ENABLE_ACTIVE_LOW true
+
 // --- CAM CAR (ESP-NOW) ---
 // MAC del vehiculo ESP32-S3
 #define CAMCAR_MAC {0x80, 0xB5, 0x4E, 0xC6, 0xF9, 0x1C}
@@ -147,6 +154,7 @@ ButtonActionCallbacks getMenuCallbacks();
 ButtonActionCallbacks getItemCallbacks();
 void returnToMenu();
 void itemLoopUpdate();
+void redrawCurrentState();   // repinta el estado actual (usado tras reinit de pantalla)
 
 // --- ENTER FUNCTIONS ---
 void enterTestMenu();
